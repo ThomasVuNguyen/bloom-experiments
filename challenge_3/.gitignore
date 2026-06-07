@@ -1,0 +1,4 @@
+venv/
+skcm_tcga_pan_can_atlas_2018/
+.DS_Store
+output/missense_mutations.csv
