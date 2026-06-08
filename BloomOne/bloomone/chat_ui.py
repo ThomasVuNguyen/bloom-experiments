@@ -290,9 +290,10 @@ def create_app(
     async def health():
         return {"status": "ok", "model": model_name}
 
+    from starlette.requests import Request
+
     @fastapi_app.post("/v1/chat")
-    async def chat_api(request):
-        from starlette.requests import Request
+    async def chat_api(request: Request):
 
         body = await request.json()
         messages = body.get("messages", [])
