@@ -147,13 +147,150 @@ CUSTOM_CSS = """
     margin: 2px 4px;
 }
 
+/* Upload progress bar */
+#upload-progress-container {
+    display: none;
+    margin: 8px 0;
+    padding: 10px 16px;
+    background: rgba(100, 100, 255, 0.08);
+    border: 1px solid rgba(100, 100, 255, 0.2);
+    border-radius: 12px;
+}
+#upload-progress-container.active { display: block; }
+#upload-progress-label {
+    font-size: 0.85em;
+    color: #a0a0d0;
+    margin-bottom: 6px;
+}
+#upload-progress-bar-bg {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.08);
+    border-radius: 4px;
+    overflow: hidden;
+}
+#upload-progress-bar {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #6366f1, #8b5cf6, #a78bfa);
+    border-radius: 4px;
+    transition: width 0.2s ease;
+}
+#upload-progress-pct {
+    font-size: 0.8em;
+    color: #b8b8d0;
+    text-align: right;
+    margin-top: 4px;
+}
+
+.upload-status p {
+    font-size: 0.85em;
+    padding: 6px 12px;
+    background: rgba(34, 197, 94, 0.08);
+    border: 1px solid rgba(34, 197, 94, 0.2);
+    border-radius: 8px;
+    margin: 4px 0;
+}
+
 footer { display: none !important; }
+"""
+
+CUSTOM_JS = """
+() => {
+    // Inject progress bar HTML
+    const container = document.createElement('div');
+    container.id = 'upload-progress-container';
+    container.innerHTML = `
+        <div id="upload-progress-label">📤 Uploading file...</div>
+        <div id="upload-progress-bar-bg">
+            <div id="upload-progress-bar"></div>
+        </div>
+        <div id="upload-progress-pct">0%</div>
+    `;
+
+    // Insert after the file upload row
+    function insertProgress() {
+        const rows = document.querySelectorAll('.gr-row, .row');
+        for (const row of rows) {
+            if (row.querySelector('input[type="file"], .upload-button, [data-testid="file"]')) {
+                row.parentNode.insertBefore(container, row.nextSibling);
+                return true;
+            }
+        }
+        // Fallback: insert before disclaimer
+        const disc = document.querySelector('.disclaimer-bar');
+        if (disc && disc.parentNode) {
+            disc.parentNode.insertBefore(container, disc);
+            return true;
+        }
+        return false;
+    }
+    setTimeout(insertProgress, 1000);
+
+    // Monkey-patch XMLHttpRequest to intercept upload progress
+    const origOpen = XMLHttpRequest.prototype.open;
+    const origSend = XMLHttpRequest.prototype.send;
+
+    XMLHttpRequest.prototype.open = function(method, url, ...args) {
+        this._url = url;
+        return origOpen.call(this, method, url, ...args);
+    };
+
+    XMLHttpRequest.prototype.send = function(body) {
+        if (this._url && this._url.includes('/upload') && body && body instanceof FormData) {
+            const bar = document.getElementById('upload-progress-bar');
+            const pct = document.getElementById('upload-progress-pct');
+            const label = document.getElementById('upload-progress-label');
+            const cont = document.getElementById('upload-progress-container');
+
+            if (cont) {
+                cont.classList.add('active');
+                if (label) label.textContent = '📤 Uploading file to server...';
+            }
+
+            this.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable && bar && pct) {
+                    const percent = Math.round((e.loaded / e.total) * 100);
+                    bar.style.width = percent + '%';
+                    const sizeMB = (e.total / (1024 * 1024)).toFixed(1);
+                    const loadedMB = (e.loaded / (1024 * 1024)).toFixed(1);
+                    pct.textContent = `${percent}% (${loadedMB} / ${sizeMB} MB)`;
+                    if (label) label.textContent = '📤 Uploading file to server...';
+                }
+            });
+
+            this.upload.addEventListener('load', () => {
+                if (bar) bar.style.width = '100%';
+                if (pct) pct.textContent = '100%';
+                if (label) label.textContent = '📤 Forwarding to backend...';
+            });
+
+            this.addEventListener('load', () => {
+                setTimeout(() => {
+                    if (cont) cont.classList.remove('active');
+                    if (bar) bar.style.width = '0%';
+                    if (pct) pct.textContent = '0%';
+                }, 2000);
+            });
+
+            this.addEventListener('error', () => {
+                if (label) label.textContent = '❌ Upload failed';
+                if (pct) pct.textContent = '';
+                setTimeout(() => {
+                    if (cont) cont.classList.remove('active');
+                }, 3000);
+            });
+        }
+        return origSend.call(this, body);
+    };
+}
 """
 
 with gr.Blocks(
     title="BloomOne — AI Neoantigen Vaccine Design",
     theme=gr.themes.Soft(),
     css=CUSTOM_CSS,
+    js=CUSTOM_JS,
 ) as demo:
 
     # ── Header ───────────────────────────────────────────────────────
@@ -165,7 +302,7 @@ with gr.Blocks(
 
         ### Personalized Neoantigen mRNA Vaccine Pipeline
 
-        Powered by **Gemma 4 27B** on Modal — ask me to design a
+        Powered by **Gemma 4 31B** on Modal — ask me to design a
         personalized mRNA vaccine from tumor mutations.
 
         </div>
