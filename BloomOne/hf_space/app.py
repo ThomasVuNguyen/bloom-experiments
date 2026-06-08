@@ -244,8 +244,8 @@ CUSTOM_JS = """
             const secs = Math.floor(elapsed % 60);
             const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-            // Asymptotic progress: approaches 90% but never reaches it
-            const fakePercent = Math.min(90, Math.round(100 * (1 - Math.exp(-elapsed / 30))));
+            // Asymptotic progress: approaches 99% slowly over minutes
+            const fakePercent = Math.min(99, Math.round(100 * (1 - Math.exp(-elapsed / 120))));
             if (bar) bar.style.width = fakePercent + '%';
             if (pct) pct.textContent = `~${fakePercent}% • ${timeStr} elapsed`;
             if (label) label.textContent = '📤 Uploading file to server...';
