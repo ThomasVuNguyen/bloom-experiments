@@ -133,13 +133,23 @@ def create_app(
         # Full OpenAI message history (includes tool calls + results)
         openai_history = gr.State([])
 
+        # Track uploaded file path
+        uploaded_file_path = gr.State(None)
+
         with gr.Row():
             msg = gr.Textbox(
                 placeholder="Describe your neoantigen analysis...",
                 show_label=False,
                 container=False,
-                scale=9,
+                scale=7,
                 autofocus=True,
+            )
+            file_upload = gr.File(
+                label="Upload MAF/VCF",
+                file_types=[".maf", ".vcf", ".tsv", ".csv", ".txt"],
+                file_count="single",
+                scale=2,
+                min_width=120,
             )
             send_btn = gr.Button(
                 "Send",
@@ -169,17 +179,60 @@ def create_app(
 
         # ── Event Handlers ───────────────────────────────────────────
 
-        def user_submit(message, display_history, full_history):
+        def handle_file_upload(file, current_path):
+            """Save uploaded file to Modal volume and return path."""
+            if file is None:
+                return current_path, gr.update()
+            import shutil
+            import pathlib
+
+            upload_dir = "/data/uploads"
+            pathlib.Path(upload_dir).mkdir(parents=True, exist_ok=True)
+
+            filename = pathlib.Path(file).name
+            dest = f"{upload_dir}/{filename}"
+            shutil.copy2(file, dest)
+
+            # Commit to Modal volume so other containers can see it
+            try:
+                from bloomone.config import volume
+                volume.commit()
+            except Exception:
+                pass  # Running locally or volume not available
+
+            return dest, gr.update(
+                value=None,
+                label=f"✅ Uploaded: {filename}",
+            )
+
+        def user_submit(message, display_history, full_history, file_path):
             """Immediately show user message and clear input."""
-            if not message.strip():
-                return "", display_history, full_history
+            if not message.strip() and not file_path:
+                return "", display_history, full_history, file_path
+
+            # Build the user message, prepending file info if available
+            content = message.strip()
+            if file_path:
+                file_notice = (
+                    f"[User uploaded a MAF file to: {file_path}]"
+                )
+                if content:
+                    content = f"{file_notice}\n\n{content}"
+                else:
+                    content = (
+                        f"{file_notice}\n\n"
+                        "I've uploaded my MAF file. "
+                        "Please run the pipeline with it."
+                    )
+
             display_history = list(display_history) + [
-                {"role": "user", "content": message}
+                {"role": "user", "content": content}
             ]
             full_history = list(full_history) + [
-                {"role": "user", "content": message}
+                {"role": "user", "content": content}
             ]
-            return "", display_history, full_history
+            # Clear the file path after injecting into message
+            return "", display_history, full_history, None
 
         def bot_respond(display_history, full_history):
             """Stream LLM response with tool-call status updates."""
@@ -253,10 +306,17 @@ def create_app(
 
         # ── Wire Events ──────────────────────────────────────────────
 
+        # File upload handler
+        file_upload.change(
+            handle_file_upload,
+            inputs=[file_upload, uploaded_file_path],
+            outputs=[uploaded_file_path, file_upload],
+        )
+
         submit_event = msg.submit(
             user_submit,
-            inputs=[msg, chatbot, openai_history],
-            outputs=[msg, chatbot, openai_history],
+            inputs=[msg, chatbot, openai_history, uploaded_file_path],
+            outputs=[msg, chatbot, openai_history, uploaded_file_path],
         ).then(
             bot_respond,
             inputs=[chatbot, openai_history],
@@ -265,8 +325,8 @@ def create_app(
 
         send_btn.click(
             user_submit,
-            inputs=[msg, chatbot, openai_history],
-            outputs=[msg, chatbot, openai_history],
+            inputs=[msg, chatbot, openai_history, uploaded_file_path],
+            outputs=[msg, chatbot, openai_history, uploaded_file_path],
         ).then(
             bot_respond,
             inputs=[chatbot, openai_history],
