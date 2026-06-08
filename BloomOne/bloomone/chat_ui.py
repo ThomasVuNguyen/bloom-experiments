@@ -189,6 +189,7 @@ def create_app(
             ] + list(full_history)
 
             status_parts: list[str] = []
+            responded = False
 
             for update in run_chat_turn(
                 client, llm_messages, model=model_name
@@ -196,6 +197,7 @@ def create_app(
                 if update["type"] == "status":
                     status_parts.append(update["content"])
                     partial = "\n".join(status_parts) + "\n\n⏳ *Working...*"
+                    responded = True
                     yield (
                         display_history
                         + [{"role": "assistant", "content": partial}],
@@ -210,6 +212,7 @@ def create_app(
                             "\n".join(status_parts) + "\n\n---\n\n"
                         )
                     final_content += update["content"]
+                    responded = True
                     yield (
                         display_history
                         + [{"role": "assistant", "content": final_content}],
@@ -221,14 +224,15 @@ def create_app(
                     if status_parts:
                         error_content = "\n".join(status_parts) + "\n\n"
                     error_content += f"❌ {update['content']}"
+                    responded = True
                     yield (
                         display_history
                         + [{"role": "assistant", "content": error_content}],
                         llm_messages[1:],
                     )
 
-            # Fallback: if nothing was yielded, show a message
-            if not status_parts:
+            # Fallback: only if the LLM produced no output at all
+            if not responded:
                 yield (
                     display_history
                     + [
@@ -284,16 +288,29 @@ def create_app(
         allow_headers=["*"],
     )
 
-    from starlette.responses import RedirectResponse
+    from starlette.responses import RedirectResponse, JSONResponse
+    from starlette.requests import Request
+
+    # API key for REST endpoint auth (set via Modal secret)
+    _api_key = os.environ.get("BLOOMONE_API_KEY", "")
+
+    def _check_auth(request: Request):
+        """Validate Bearer token against BLOOMONE_API_KEY."""
+        auth = request.headers.get("authorization", "")
+        if not _api_key or not auth.startswith("Bearer "):
+            return False
+        return auth[7:] == _api_key
 
     @fastapi_app.get("/v1/health")
     async def health():
         return {"status": "ok", "model": model_name}
 
-    from starlette.requests import Request
-
     @fastapi_app.post("/v1/chat")
     async def chat_api(request: Request):
+        if not _check_auth(request):
+            return JSONResponse(
+                {"error": "Unauthorized"}, status_code=401
+            )
 
         body = await request.json()
         messages = body.get("messages", [])

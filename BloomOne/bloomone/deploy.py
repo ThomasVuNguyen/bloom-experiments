@@ -202,7 +202,10 @@ GEMMA_MODEL = "google/gemma-4-31b-it:free"
 @app.function(
     image=chatbot_image,
     volumes={VOLUME_MOUNT: volume},
-    secrets=[modal.Secret.from_name("openrouter-api-key")],
+    secrets=[
+            modal.Secret.from_name("openrouter-api-key"),
+            modal.Secret.from_name("bloomone-api-key"),
+        ],
     timeout=1800,
     scaledown_window=120,
 )

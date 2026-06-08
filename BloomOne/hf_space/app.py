@@ -22,6 +22,7 @@ BACKEND_URL = os.environ.get(
 )
 API_CHAT_URL = f"{BACKEND_URL}/v1/chat"
 API_HEALTH_URL = f"{BACKEND_URL}/v1/health"
+BLOOMONE_API_KEY = os.environ.get("BLOOMONE_API_KEY", "")
 
 # Timeout: pipeline stages can take minutes (especially binding prediction)
 API_TIMEOUT = httpx.Timeout(300.0, connect=30.0)
@@ -36,10 +37,15 @@ def call_backend(messages: list[dict]) -> dict:
 
     Returns dict with: response, status_updates, updated_messages
     """
+    headers = {}
+    if BLOOMONE_API_KEY:
+        headers["Authorization"] = f"Bearer {BLOOMONE_API_KEY}"
+
     try:
         resp = httpx.post(
             API_CHAT_URL,
             json={"messages": messages},
+            headers=headers,
             timeout=API_TIMEOUT,
             follow_redirects=True,
         )
