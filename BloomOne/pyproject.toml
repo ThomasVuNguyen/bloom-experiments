@@ -11,7 +11,8 @@ dependencies = [
     "pandas>=2.2.0",
     "requests>=2.32.0",
     "pydantic>=2.10.0",
-    "google-genai>=1.0.0",
+    "openai>=1.40.0",
+    "httpx>=0.27.0",
     "gradio>=5.0.0",
     "python-codon-tables>=0.1.12",
     "biopython>=1.84",
@@ -25,6 +26,11 @@ dev = [
 gpu = [
     "mhcflurry>=2.2.0",
     "torch>=2.4.0",
+]
+chatbot = [
+    "vllm>=0.9.0",
+    "openai>=1.40.0",
+    "httpx>=0.27.0",
 ]
 
 [build-system]

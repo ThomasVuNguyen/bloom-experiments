@@ -1,5 +1,5 @@
 """
-BloomOne Modal Deployment — ASGI app serving the MCP server.
+BloomOne Modal Deployment — MCP server + AI chatbot.
 
 Deploy with: modal deploy bloomone/deploy.py
 Serve locally with: modal serve bloomone/deploy.py
@@ -57,6 +57,23 @@ mrna_image = (
         "python-codon-tables>=0.1.12",
         "pandas>=2.2.0",
         "pydantic>=2.10.0",
+    )
+    .add_local_dir(BLOOMONE_SRC, remote_path="/root/bloomone")
+)
+
+# Chatbot image — Gemini API client + pipeline dependencies (no GPU needed)
+chatbot_image = (
+    modal.Image.debian_slim(python_version="3.12")
+    .pip_install(
+        "openai>=1.40.0",
+        "google-auth>=2.30.0",
+        "gradio",
+        "fastapi>=0.115.0",
+        "httpx>=0.27.0",
+        "pandas>=2.2.0",
+        "requests>=2.32.0",
+        "pydantic>=2.10.0",
+        "biopython>=1.84",
     )
     .add_local_dir(BLOOMONE_SRC, remote_path="/root/bloomone")
 )
@@ -177,19 +194,55 @@ def run_mrna_design_remote(ranked_path: str, patient_id: str, top_n: int = 20) -
     return result.model_dump()
 
 
-# ── Local entrypoint ─────────────────────────────────────────────────────────
+# ── AI Chatbot (Gemma 4 26B A4B via OpenRouter) ────────────────────────────
+
+GEMMA_MODEL = "google/gemma-4-31b-it:free"
+
+
+@app.function(
+    image=chatbot_image,
+    volumes={VOLUME_MOUNT: volume},
+    secrets=[modal.Secret.from_name("openrouter-api-key")],
+    timeout=1800,
+    scaledown_window=120,
+)
+@modal.concurrent(max_inputs=10)
+@modal.asgi_app()
+def chatbot():
+    """
+    AI chatbot: Gradio UI + Gemma 4 26B A4B (OpenRouter) + BloomOne tools.
+
+    Calls Gemma 4 via OpenRouter's OpenAI-compatible endpoint.
+    No GPU needed — LLM inference is handled by OpenRouter (free tier).
+    Tool calls from the LLM are executed directly against
+    BloomOne stage functions (same container).
+    """
+    import sys
+
+    sys.path.insert(0, "/root")
+    from bloomone.chat_ui import create_app
+
+    return create_app(
+        llm_url="https://openrouter.ai/api/v1",
+        model_name=GEMMA_MODEL,
+    )
+
+
+# ── Local entrypoint ─────────────────────────────────────────────────────
 
 
 @app.local_entrypoint()
 def main():
     """Test entrypoint — prints server info."""
-    print("BloomOne MCP Server")
-    print("=" * 40)
+    print("BloomOne MCP Server + AI Chatbot")
+    print("=" * 50)
     print(f"App: {APP_NAME}")
     print(f"Volume: bloomone-data → {VOLUME_MOUNT}")
+    print(f"Model: {GEMMA_MODEL}")
     print()
     print("Deploy:  modal deploy bloomone/deploy.py")
     print("Serve:   modal serve bloomone/deploy.py")
     print()
-    print("MCP endpoint will be at:")
-    print("  https://<your-workspace>--bloomone-web.modal.run/mcp/")
+    print("Endpoints (after deploy):")
+    print("  MCP:     https://<workspace>--bloomone-web.modal.run/mcp/")
+    print("  Chatbot: https://<workspace>--bloomone-chatbot.modal.run/")
