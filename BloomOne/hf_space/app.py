@@ -22,6 +22,7 @@ BACKEND_URL = os.environ.get(
 )
 API_CHAT_URL = f"{BACKEND_URL}/v1/chat"
 API_HEALTH_URL = f"{BACKEND_URL}/v1/health"
+API_UPLOAD_URL = f"{BACKEND_URL}/v1/upload"
 BLOOMONE_API_KEY = os.environ.get("BLOOMONE_API_KEY", "")
 
 # Timeout: pipeline stages can take minutes (especially binding prediction)
@@ -77,6 +78,33 @@ def call_backend(messages: list[dict]) -> dict:
             "status_updates": [],
             "updated_messages": messages,
         }
+
+
+def upload_to_backend(file_path: str) -> dict:
+    """
+    Upload a file to the Modal backend's /v1/upload endpoint.
+
+    Returns dict with: path (on Modal volume), filename, size_bytes
+    """
+    headers = {}
+    if BLOOMONE_API_KEY:
+        headers["Authorization"] = f"Bearer {BLOOMONE_API_KEY}"
+
+    try:
+        import pathlib
+        filename = pathlib.Path(file_path).name
+        with open(file_path, "rb") as f:
+            resp = httpx.post(
+                API_UPLOAD_URL,
+                files={"file": (filename, f)},
+                headers=headers,
+                timeout=API_TIMEOUT,
+                follow_redirects=True,
+            )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        return {"error": str(e)}
 
 
 # ── Gradio Interface ─────────────────────────────────────────────────────────
@@ -163,13 +191,23 @@ with gr.Blocks(
     # Full OpenAI message history (persists tool calls across turns)
     full_history = gr.State([])
 
+    # Track uploaded file path on Modal volume
+    uploaded_file_path = gr.State(None)
+
     with gr.Row():
         msg = gr.Textbox(
             placeholder="Describe your neoantigen analysis...",
             show_label=False,
             container=False,
-            scale=9,
+            scale=7,
             autofocus=True,
+        )
+        file_upload = gr.File(
+            label="Upload MAF/VCF",
+            file_types=[".maf", ".vcf", ".tsv", ".csv", ".txt"],
+            file_count="single",
+            scale=2,
+            min_width=120,
         )
         send_btn = gr.Button(
             "Send",
@@ -182,7 +220,7 @@ with gr.Blocks(
         '<p class="disclaimer-bar">'
         "⚠️ All outputs are for <strong>RESEARCH USE ONLY</strong>. "
         "Not validated for clinical use. "
-        "Backend: Gemma 4 27B on Modal GPU."
+        "Backend: Gemma 4 31B on Modal."
         "</p>"
     )
 
@@ -200,17 +238,48 @@ with gr.Blocks(
 
     # ── Event Handlers ───────────────────────────────────────────────
 
-    def user_submit(message, display_history, openai_messages):
+    def handle_file_upload(file, current_path):
+        """Upload file to Modal backend and return the volume path."""
+        if file is None:
+            return current_path, gr.update()
+
+        result = upload_to_backend(file)
+
+        if "error" in result:
+            return current_path, gr.update(
+                value=None,
+                label=f"❌ Upload failed: {result['error']}",
+            )
+
+        return result["path"], gr.update(
+            value=None,
+            label=f"✅ Uploaded: {result['filename']}",
+        )
+
+    def user_submit(message, display_history, openai_messages, file_path):
         """Show user message immediately and clear input."""
-        if not message.strip():
-            return "", display_history, openai_messages
+        if not message.strip() and not file_path:
+            return "", display_history, openai_messages, file_path
+
+        content = message.strip()
+        if file_path:
+            file_notice = f"[User uploaded a MAF file to: {file_path}]"
+            if content:
+                content = f"{file_notice}\n\n{content}"
+            else:
+                content = (
+                    f"{file_notice}\n\n"
+                    "I've uploaded my MAF file. "
+                    "Please run the pipeline with it."
+                )
+
         display_history = list(display_history) + [
-            {"role": "user", "content": message}
+            {"role": "user", "content": content}
         ]
         openai_messages = list(openai_messages) + [
-            {"role": "user", "content": message}
+            {"role": "user", "content": content}
         ]
-        return "", display_history, openai_messages
+        return "", display_history, openai_messages, None
 
     def bot_respond(display_history, openai_messages):
         """Call the Modal backend and display the response."""
@@ -242,10 +311,16 @@ with gr.Blocks(
 
     # ── Wire Events ──────────────────────────────────────────────────
 
+    file_upload.change(
+        handle_file_upload,
+        inputs=[file_upload, uploaded_file_path],
+        outputs=[uploaded_file_path, file_upload],
+    )
+
     msg.submit(
         user_submit,
-        inputs=[msg, chatbot, full_history],
-        outputs=[msg, chatbot, full_history],
+        inputs=[msg, chatbot, full_history, uploaded_file_path],
+        outputs=[msg, chatbot, full_history, uploaded_file_path],
     ).then(
         bot_respond,
         inputs=[chatbot, full_history],
@@ -254,8 +329,8 @@ with gr.Blocks(
 
     send_btn.click(
         user_submit,
-        inputs=[msg, chatbot, full_history],
-        outputs=[msg, chatbot, full_history],
+        inputs=[msg, chatbot, full_history, uploaded_file_path],
+        outputs=[msg, chatbot, full_history, uploaded_file_path],
     ).then(
         bot_respond,
         inputs=[chatbot, full_history],

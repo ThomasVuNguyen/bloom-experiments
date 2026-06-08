@@ -392,6 +392,49 @@ def create_app(
             "updated_messages": llm_messages[1:],
         })
 
+    async def _upload(request):
+        """Accept a file upload and save to Modal volume."""
+        # Auth check
+        if _api_key:
+            auth = request.headers.get("authorization", "")
+            if not auth.startswith("Bearer ") or auth[7:] != _api_key:
+                return JSONResponse(
+                    {"error": "Unauthorized"}, status_code=401
+                )
+
+        import pathlib
+
+        # Parse multipart form data
+        form = await request.form()
+        upload_file = form.get("file")
+        if not upload_file:
+            return JSONResponse(
+                {"error": "No file provided"}, status_code=400
+            )
+
+        upload_dir = "/data/uploads"
+        pathlib.Path(upload_dir).mkdir(parents=True, exist_ok=True)
+
+        filename = upload_file.filename or "upload.maf"
+        dest = f"{upload_dir}/{filename}"
+
+        contents = await upload_file.read()
+        with open(dest, "wb") as f:
+            f.write(contents)
+
+        # Commit to Modal volume
+        try:
+            from bloomone.config import volume
+            volume.commit()
+        except Exception:
+            pass
+
+        return JSONResponse({
+            "path": dest,
+            "filename": filename,
+            "size_bytes": len(contents),
+        })
+
     async def _root(request):
         return RedirectResponse(url="/chat")
 
@@ -401,6 +444,7 @@ def create_app(
     # Add REST routes AFTER Gradio mount (prepend so they take priority)
     app.routes.insert(0, Route("/v1/health", _health, methods=["GET"]))
     app.routes.insert(0, Route("/v1/chat", _chat, methods=["POST"]))
+    app.routes.insert(0, Route("/v1/upload", _upload, methods=["POST"]))
     app.routes.insert(0, Route("/", _root, methods=["GET"]))
 
     return app
