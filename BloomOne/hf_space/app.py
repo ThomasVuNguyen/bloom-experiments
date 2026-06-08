@@ -216,6 +216,13 @@ with gr.Blocks(
             min_width=80,
         )
 
+    # Upload status indicator
+    upload_status = gr.Markdown(
+        "",
+        elem_classes=["upload-status"],
+        visible=False,
+    )
+
     gr.Markdown(
         '<p class="disclaimer-bar">'
         "⚠️ All outputs are for <strong>RESEARCH USE ONLY</strong>. "
@@ -238,22 +245,41 @@ with gr.Blocks(
 
     # ── Event Handlers ───────────────────────────────────────────────
 
-    def handle_file_upload(file, current_path):
+    def handle_file_upload(file, current_path, progress=gr.Progress()):
         """Upload file to Modal backend and return the volume path."""
         if file is None:
-            return current_path, gr.update()
+            return current_path, gr.update(), gr.update(visible=False)
+
+        import pathlib
+        file_size = pathlib.Path(file).stat().st_size
+        size_mb = file_size / (1024 * 1024)
+        filename = pathlib.Path(file).name
+
+        progress(0.3, desc=f"📤 Forwarding {filename} ({size_mb:.1f} MB) to backend...")
 
         result = upload_to_backend(file)
 
         if "error" in result:
+            progress(1.0, desc="❌ Upload failed")
             return current_path, gr.update(
                 value=None,
-                label=f"❌ Upload failed: {result['error']}",
+                label="Upload MAF/VCF",
+            ), gr.update(
+                value=f"❌ Upload failed: {result['error']}",
+                visible=True,
             )
 
+        progress(1.0, desc="✅ Done!")
         return result["path"], gr.update(
             value=None,
-            label=f"✅ Uploaded: {result['filename']}",
+            label="Upload MAF/VCF",
+        ), gr.update(
+            value=(
+                f"✅ **Uploaded:** `{result['filename']}` "
+                f"({result.get('size_bytes', 0) / (1024*1024):.1f} MB) — "
+                f"ready to use in chat"
+            ),
+            visible=True,
         )
 
     def user_submit(message, display_history, openai_messages, file_path):
@@ -314,7 +340,7 @@ with gr.Blocks(
     file_upload.change(
         handle_file_upload,
         inputs=[file_upload, uploaded_file_path],
-        outputs=[uploaded_file_path, file_upload],
+        outputs=[uploaded_file_path, file_upload, upload_status],
     )
 
     msg.submit(
