@@ -197,7 +197,7 @@ footer { display: none !important; }
 
 CUSTOM_JS = """
 () => {
-    // Inject progress bar HTML
+    // Create the progress overlay
     const container = document.createElement('div');
     container.id = 'upload-progress-container';
     container.innerHTML = `
@@ -205,84 +205,114 @@ CUSTOM_JS = """
         <div id="upload-progress-bar-bg">
             <div id="upload-progress-bar"></div>
         </div>
-        <div id="upload-progress-pct">0%</div>
+        <div id="upload-progress-pct">Starting upload...</div>
     `;
 
-    // Insert after the file upload row
-    function insertProgress() {
-        const rows = document.querySelectorAll('.gr-row, .row');
-        for (const row of rows) {
-            if (row.querySelector('input[type="file"], .upload-button, [data-testid="file"]')) {
-                row.parentNode.insertBefore(container, row.nextSibling);
-                return true;
-            }
+    let inserted = false;
+    let uploadStartTime = null;
+    let animFrame = null;
+    let isUploading = false;
+
+    function insertContainer() {
+        if (inserted) return;
+        // Find the gradio container area
+        const target = document.querySelector('.disclaimer-bar')
+                    || document.querySelector('.upload-status')
+                    || document.querySelector('.examples');
+        if (target && target.parentNode) {
+            target.parentNode.insertBefore(container, target);
+            inserted = true;
         }
-        // Fallback: insert before disclaimer
-        const disc = document.querySelector('.disclaimer-bar');
-        if (disc && disc.parentNode) {
-            disc.parentNode.insertBefore(container, disc);
-            return true;
-        }
-        return false;
     }
-    setTimeout(insertProgress, 1000);
 
-    // Monkey-patch XMLHttpRequest to intercept upload progress
-    const origOpen = XMLHttpRequest.prototype.open;
-    const origSend = XMLHttpRequest.prototype.send;
+    function startUploadUI() {
+        if (isUploading) return;
+        isUploading = true;
+        insertContainer();
+        uploadStartTime = Date.now();
+        container.classList.add('active');
 
-    XMLHttpRequest.prototype.open = function(method, url, ...args) {
-        this._url = url;
-        return origOpen.call(this, method, url, ...args);
-    };
+        const bar = document.getElementById('upload-progress-bar');
+        const pct = document.getElementById('upload-progress-pct');
+        const label = document.getElementById('upload-progress-label');
 
-    XMLHttpRequest.prototype.send = function(body) {
-        if (this._url && this._url.includes('/upload') && body && body instanceof FormData) {
-            const bar = document.getElementById('upload-progress-bar');
-            const pct = document.getElementById('upload-progress-pct');
-            const label = document.getElementById('upload-progress-label');
-            const cont = document.getElementById('upload-progress-container');
+        // Animated indeterminate progress that slows down
+        function animate() {
+            if (!isUploading) return;
+            const elapsed = (Date.now() - uploadStartTime) / 1000;
+            const mins = Math.floor(elapsed / 60);
+            const secs = Math.floor(elapsed % 60);
+            const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
-            if (cont) {
-                cont.classList.add('active');
-                if (label) label.textContent = '📤 Uploading file to server...';
-            }
+            // Asymptotic progress: approaches 90% but never reaches it
+            const fakePercent = Math.min(90, Math.round(100 * (1 - Math.exp(-elapsed / 30))));
+            if (bar) bar.style.width = fakePercent + '%';
+            if (pct) pct.textContent = `~${fakePercent}% • ${timeStr} elapsed`;
+            if (label) label.textContent = '📤 Uploading file to server...';
 
-            this.upload.addEventListener('progress', (e) => {
-                if (e.lengthComputable && bar && pct) {
-                    const percent = Math.round((e.loaded / e.total) * 100);
-                    bar.style.width = percent + '%';
-                    const sizeMB = (e.total / (1024 * 1024)).toFixed(1);
-                    const loadedMB = (e.loaded / (1024 * 1024)).toFixed(1);
-                    pct.textContent = `${percent}% (${loadedMB} / ${sizeMB} MB)`;
-                    if (label) label.textContent = '📤 Uploading file to server...';
-                }
-            });
-
-            this.upload.addEventListener('load', () => {
-                if (bar) bar.style.width = '100%';
-                if (pct) pct.textContent = '100%';
-                if (label) label.textContent = '📤 Forwarding to backend...';
-            });
-
-            this.addEventListener('load', () => {
-                setTimeout(() => {
-                    if (cont) cont.classList.remove('active');
-                    if (bar) bar.style.width = '0%';
-                    if (pct) pct.textContent = '0%';
-                }, 2000);
-            });
-
-            this.addEventListener('error', () => {
-                if (label) label.textContent = '❌ Upload failed';
-                if (pct) pct.textContent = '';
-                setTimeout(() => {
-                    if (cont) cont.classList.remove('active');
-                }, 3000);
-            });
+            animFrame = requestAnimationFrame(animate);
         }
-        return origSend.call(this, body);
-    };
+        animate();
+    }
+
+    function stopUploadUI(success) {
+        isUploading = false;
+        if (animFrame) cancelAnimationFrame(animFrame);
+
+        const bar = document.getElementById('upload-progress-bar');
+        const pct = document.getElementById('upload-progress-pct');
+        const label = document.getElementById('upload-progress-label');
+
+        if (success) {
+            if (bar) bar.style.width = '100%';
+            if (label) label.textContent = '✅ Upload complete!';
+            const elapsed = uploadStartTime ? ((Date.now() - uploadStartTime) / 1000).toFixed(1) : '?';
+            if (pct) pct.textContent = `Done in ${elapsed}s`;
+        } else {
+            if (label) label.textContent = '❌ Upload failed';
+            if (pct) pct.textContent = '';
+        }
+
+        setTimeout(() => {
+            container.classList.remove('active');
+            if (bar) bar.style.width = '0%';
+        }, 3000);
+    }
+
+    // Watch for Gradio's upload indicators in the DOM
+    const observer = new MutationObserver((mutations) => {
+        // Look for upload state changes
+        const fileAreas = document.querySelectorAll('[data-testid="file"], .file-preview, .upload-text');
+        const allText = document.body.innerText;
+
+        // Detect "Uploading" text appearing in file component
+        const uploadingEls = document.querySelectorAll('.uploading, .progress-text, .file-upload');
+        let foundUploading = false;
+
+        // Check all text nodes for "Uploading" in the file area
+        document.querySelectorAll('span, p, div').forEach(el => {
+            const t = el.textContent || '';
+            if (t.includes('Uploading') && t.includes('file') && el.offsetParent !== null) {
+                foundUploading = true;
+            }
+        });
+
+        if (foundUploading && !isUploading) {
+            startUploadUI();
+        } else if (!foundUploading && isUploading) {
+            stopUploadUI(true);
+        }
+    });
+
+    // Start observing after Gradio renders
+    setTimeout(() => {
+        insertContainer();
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+        });
+    }, 2000);
 }
 """
 
