@@ -89,8 +89,39 @@ def ingest_local_files(
         print("HLA alleles not provided — will need OptiType typing")
 
     maf_path = tumor_dest if is_maf else None
+    requires_optitype = hla_alleles == []
+    skip_stage2 = maf_path is not None
+
+    warnings = []
+    if requires_optitype:
+        warnings.append(
+            "HLA alleles not provided. Run stage1_run_optitype with a BAM/FASTQ "
+            "file, or provide HLA alleles manually (e.g. HLA-A*02:01,HLA-B*07:02). "
+            "Pipeline CANNOT proceed past Stage 3 without HLA alleles."
+        )
+    if skip_stage2:
+        next_action = (
+            f"Proceed to stage3_generate_peptides with maf_path='{maf_path}'"
+            if not requires_optitype
+            else f"First run stage1_run_optitype, then stage3_generate_peptides with maf_path='{maf_path}'"
+        )
+    else:
+        next_action = (
+            f"Run stage2_call_mutations with the patient data JSON"
+        )
 
     return PatientData(
+        stage=1,
+        stage_name="Data Ingestion",
+        summary=(
+            f"Ingested local files for patient {patient_id}. "
+            f"{'MAF provided (skip Stage 2). ' if skip_stage2 else 'BAM input (Stage 2 required). '}"
+            f"{'HLA alleles provided. ' if not requires_optitype else 'HLA alleles MISSING. '}"
+            f"{'RNA-seq available.' if tpm_dest else 'No RNA-seq data.'}"
+        ),
+        next_action=next_action,
+        provenance={"input_type": "maf" if is_maf else "bam", "data_source": "local"},
+        warnings=warnings,
         patient_id=patient_id,
         tumor_path=tumor_dest,
         normal_path=normal_dest,
@@ -100,6 +131,8 @@ def ingest_local_files(
         tpm_path=tpm_dest,
         data_source=DataSource.LOCAL,
         expression_validated=tpm_dest is not None,
+        requires_optitype=requires_optitype,
+        skip_stage2=skip_stage2,
     )
 
 
@@ -184,7 +217,27 @@ def fetch_tcga_data(
 
     is_maf = file_name.endswith((".maf", ".maf.gz"))
 
+    warnings = [
+        "HLA alleles not available from TCGA download. Run stage1_run_optitype "
+        "with a BAM file, or provide HLA alleles manually."
+    ]
+
     return PatientData(
+        stage=1,
+        stage_name="Data Ingestion",
+        summary=(
+            f"Fetched {data_type} from TCGA/GDC for case {case_id}. "
+            f"Downloaded: {file_name}. "
+            f"{'MAF format — skip Stage 2. ' if is_maf else 'BAM format — Stage 2 required. '}"
+            f"HLA alleles MISSING."
+        ),
+        next_action=(
+            f"Provide HLA alleles, then proceed to stage3_generate_peptides with maf_path='{file_path}'"
+            if is_maf
+            else f"Run stage2_call_mutations, then provide HLA alleles for Stage 4"
+        ),
+        provenance={"data_source": "tcga", "gdc_file_id": file_id, "file_name": file_name},
+        warnings=warnings,
         patient_id=case_id,
         tumor_path=file_path,
         normal_path=None,
@@ -194,6 +247,8 @@ def fetch_tcga_data(
         tpm_path=None,
         data_source=DataSource.TCGA,
         expression_validated=False,
+        requires_optitype=True,
+        skip_stage2=is_maf,
     )
 
 
@@ -264,7 +319,35 @@ def fetch_cbio_data(
 
     print(f"MAF saved to: {maf_path}")
 
+    # Count mutation types for summary
+    missense_count = sum(1 for m in sample_mutations if m.get("mutationType") == "Missense_Mutation")
+
+    warnings = [
+        "HLA alleles not available from cBioPortal. You MUST provide HLA alleles "
+        "manually (e.g. HLA-A*02:01,HLA-B*07:02) or they cannot be determined "
+        "from MAF data. Pipeline cannot proceed past Stage 3 without HLA alleles."
+    ]
+
     return PatientData(
+        stage=1,
+        stage_name="Data Ingestion",
+        summary=(
+            f"Fetched {len(sample_mutations)} mutations ({missense_count} missense) "
+            f"from cBioPortal study '{study_id}' for sample {sample_id}. "
+            f"MAF format — skip Stage 2. HLA alleles MISSING."
+        ),
+        next_action=(
+            f"Provide HLA alleles, then call stage3_generate_peptides "
+            f"with maf_path='{maf_path}' and patient_id='{sample_id}'"
+        ),
+        provenance={
+            "data_source": "cbio",
+            "study_id": study_id,
+            "sample_id": sample_id,
+            "total_mutations": len(sample_mutations),
+            "missense_mutations": missense_count,
+        },
+        warnings=warnings,
         patient_id=sample_id,
         tumor_path=maf_path,
         normal_path=None,
@@ -274,6 +357,8 @@ def fetch_cbio_data(
         tpm_path=None,
         data_source=DataSource.CBIO,
         expression_validated=False,
+        requires_optitype=True,
+        skip_stage2=True,
     )
 
 

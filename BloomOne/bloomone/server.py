@@ -1,14 +1,22 @@
 """
-BloomOne MCP Server — FastMCP server exposing all 7 pipeline stages as tools.
+BloomOne MCP Server — FastMCP server exposing all 7 pipeline stages as tools,
+plus validation, status, inspection, and async job management tools.
 
 Each tool maps to one pipeline stage, with clear inputs/outputs that
-an AI agent (Gemini 2.5 Pro) can orchestrate sequentially.
+an AI agent can orchestrate sequentially. All tool responses include:
+- summary: human-readable description of what happened
+- next_action: what tool to call next with which arguments
+- provenance: scientific parameters, thresholds, tool versions
+- warnings: issues the agent should surface to the user
+- research_use_only: always True — results are not for clinical use
 """
 
 from __future__ import annotations
 
 from fastmcp import FastMCP
 
+from bloomone.config import BLOOMONE_VERSION
+from bloomone.errors import wrap_stage_error
 from bloomone.stages.stage1_ingest import (
     fetch_cbio_data,
     fetch_tcga_data,
@@ -49,12 +57,56 @@ def _sync_after():
 mcp = FastMCP(
     "BloomOne — Personalized Neoantigen Vaccine Pipeline",
     instructions=(
-        "BloomOne is a 7-stage pipeline that turns tumor DNA into a "
-        "personalized mRNA neoantigen vaccine. Run stages sequentially: "
-        "1→2→3→4→5→6→7. Stage 2 can be skipped if MAF input is provided. "
-        "Each stage's output path feeds into the next stage's input."
+        f"BloomOne v{BLOOMONE_VERSION} is a 7-stage pipeline that turns tumor DNA "
+        "into a personalized mRNA neoantigen vaccine construct.\n\n"
+        "## Pipeline Stages\n"
+        "1→2→3→4→5→6→7 (sequential). Stage 2 is skipped with MAF input.\n\n"
+        "## Quick Start\n"
+        "- Use `validate_inputs` FIRST to check inputs before running.\n"
+        "- Use `pipeline_status` to see what has already been run.\n"
+        "- Use `get_dependency_graph` to understand stage requirements.\n"
+        "- Use `inspect_artifact` to examine intermediate files.\n\n"
+        "## Data Source Selection\n"
+        "- **cBioPortal** (`stage1_fetch_cbio`): Pre-called MAF, skips Stage 2. "
+        "Best for TCGA samples with known study IDs.\n"
+        "- **TCGA/GDC** (`stage1_fetch_tcga`): Raw data download. May need Stage 2.\n"
+        "- **Local** (`stage1_ingest_local`): User-provided BAM/FASTQ/MAF files.\n\n"
+        "## HLA Alleles — CRITICAL\n"
+        "HLA alleles are REQUIRED for Stage 4. cBioPortal does NOT provide them.\n"
+        "If missing: ask the user, or run `stage1_run_optitype` with BAM data.\n"
+        "Format: HLA-A*02:01,HLA-B*07:02,HLA-C*04:01\n\n"
+        "## Every Response Contains\n"
+        "- `summary`: human-readable narration\n"
+        "- `next_action`: exactly what tool to call next\n"
+        "- `provenance`: scientific parameters used\n"
+        "- `warnings`: issues to surface to the user\n"
+        "- `research_use_only`: always True\n\n"
+        "## Safety\n"
+        "ALL outputs are for RESEARCH USE ONLY. Not validated for clinical use."
     ),
 )
+
+
+# ── Register Additional Tools ───────────────────────────────────────────────
+
+# Phase 2: Validation tools
+from bloomone.tools.validate import register_validation_tools
+register_validation_tools(mcp)
+
+# Phase 3: Status & inspection tools
+from bloomone.tools.status import register_status_tools
+register_status_tools(mcp)
+
+from bloomone.tools.inspect import register_inspect_tools
+register_inspect_tools(mcp)
+
+# Phase 4: Async job tools
+from bloomone.tools.jobs import register_job_tools
+register_job_tools(mcp)
+
+# Phase 6: Resources & prompts
+from bloomone.resources import register_resources_and_prompts
+register_resources_and_prompts(mcp)
 
 
 # ── Stage 1: Data Ingestion ─────────────────────────────────────────────────
@@ -75,6 +127,11 @@ async def stage1_ingest_local(
     and RNA-seq expression data. If HLA alleles are not provided, run
     stage1_run_optitype to predict them.
 
+    Check the response for:
+    - requires_optitype: True if HLA alleles need to be determined
+    - skip_stage2: True if MAF input was provided (skip mutation calling)
+    - next_action: exactly what to do next
+
     Args:
         tumor_path: Path to tumor BAM/FASTQ or pre-called MAF file
         patient_id: Unique identifier for this patient run
@@ -82,18 +139,20 @@ async def stage1_ingest_local(
         hla_alleles: Comma-separated HLA alleles (e.g. "HLA-A*02:01,HLA-B*07:02")
         rna_seq_path: Path to RNA-seq TPM file (optional, for expression filtering)
     """
-    alleles_list = [a.strip() for a in hla_alleles.split(",") if a.strip()] if hla_alleles else None
-
-    _sync_before()
-    result = ingest_local_files(
-        tumor_path=tumor_path,
-        normal_path=normal_path if normal_path else None,
-        hla_alleles=alleles_list,
-        rna_seq_path=rna_seq_path if rna_seq_path else None,
-        patient_id=patient_id,
-    )
-    _sync_after()
-    return result.model_dump()
+    try:
+        alleles_list = [a.strip() for a in hla_alleles.split(",") if a.strip()] if hla_alleles else None
+        _sync_before()
+        result = ingest_local_files(
+            tumor_path=tumor_path,
+            normal_path=normal_path if normal_path else None,
+            hla_alleles=alleles_list,
+            rna_seq_path=rna_seq_path if rna_seq_path else None,
+            patient_id=patient_id,
+        )
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=1)
 
 
 @mcp.tool()
@@ -107,14 +166,20 @@ async def stage1_fetch_tcga(
     Downloads mutation data (MAF) or raw sequencing (BAM) from TCGA.
     MAF downloads skip Stage 2. BAM downloads require Stage 2.
 
+    Note: TCGA does NOT provide HLA alleles. You will need to either
+    ask the user for HLA alleles or run OptiType on BAM data.
+
     Args:
         case_id: TCGA case ID (e.g. "TCGA-BF-A3DL-01")
         data_type: GDC data type to fetch (default: "Masked Somatic Mutation")
     """
-    _sync_before()
-    result = fetch_tcga_data(case_id=case_id, data_type=data_type)
-    _sync_after()
-    return result.model_dump()
+    try:
+        _sync_before()
+        result = fetch_tcga_data(case_id=case_id, data_type=data_type)
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=1)
 
 
 @mcp.tool()
@@ -127,14 +192,21 @@ async def stage1_fetch_cbio(
 
     Downloads mutation data in MAF format. Always skips Stage 2.
 
+    ⚠️ IMPORTANT: cBioPortal does NOT provide HLA alleles. The response
+    will include requires_optitype=True and a warning. You MUST obtain
+    HLA alleles from the user before proceeding to Stage 4.
+
     Args:
         study_id: cBioPortal study ID (e.g. "skcm_tcga_pan_can_atlas_2018")
         sample_id: Sample barcode (e.g. "TCGA-BF-A3DL-01")
     """
-    _sync_before()
-    result = fetch_cbio_data(study_id=study_id, sample_id=sample_id)
-    _sync_after()
-    return result.model_dump()
+    try:
+        _sync_before()
+        result = fetch_cbio_data(study_id=study_id, sample_id=sample_id)
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=1)
 
 
 @mcp.tool()
@@ -148,14 +220,27 @@ async def stage1_run_optitype(
     Predicts HLA-A, HLA-B, HLA-C alleles from BAM/FASTQ input.
     Only needed if HLA alleles were not provided in stage1_ingest_local.
 
+    This is a long-running operation (~15 min). Consider using start_stage
+    for async execution on large files.
+
     Args:
         bam_path: Path to BAM or FASTQ file
         patient_id: Patient identifier
     """
-    _sync_before()
-    alleles = run_optitype(bam_path=bam_path, patient_id=patient_id)
-    _sync_after()
-    return {"patient_id": patient_id, "hla_alleles": alleles, "source": "optitype"}
+    try:
+        _sync_before()
+        alleles = run_optitype(bam_path=bam_path, patient_id=patient_id)
+        _sync_after()
+        return {
+            "patient_id": patient_id,
+            "hla_alleles": alleles,
+            "source": "optitype",
+            "summary": f"OptiType predicted {len(alleles)} HLA-I alleles: {', '.join(alleles)}",
+            "next_action": "HLA alleles are now available. Proceed to the next stage.",
+            "research_use_only": True,
+        }
+    except Exception as e:
+        return wrap_stage_error(e, stage=1)
 
 
 # ── Stage 2: Mutation Calling ────────────────────────────────────────────────
@@ -172,17 +257,23 @@ async def stage2_call_mutations(
     somatic mutations. If the input contains pre-called MAF data
     (e.g. from cBioPortal), this stage is automatically skipped.
 
+    ⚠️ This is a LONG-RUNNING operation (~45 min for WES data).
+    For async execution, use start_stage(stage=2, ...) instead.
+
     Args:
         patient_data_json: JSON string of PatientData from Stage 1
     """
-    import json
-    from bloomone.models import PatientData
+    try:
+        import json as _json
+        from bloomone.models import PatientData
 
-    _sync_before()
-    patient_data = PatientData(**json.loads(patient_data_json))
-    result = call_mutations(patient_data)
-    _sync_after()
-    return result.model_dump()
+        _sync_before()
+        patient_data = PatientData(**_json.loads(patient_data_json))
+        result = call_mutations(patient_data)
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=2)
 
 
 # ── Stage 3: Peptide Generation ──────────────────────────────────────────────
@@ -201,19 +292,25 @@ async def stage3_generate_peptides(
     all possible peptide fragments containing each mutation using a
     sliding window approach. Optionally annotates via Ensembl VEP.
 
+    Response includes summary with peptide count, gene count, and
+    skipped mutation count for transparency.
+
     Args:
         maf_path: Path to MAF file from Stage 2 (or Stage 1 if skipped)
         patient_id: Patient ID (auto-detected from MAF if empty)
         tpm_path: Optional RNA-seq TPM file for expression filtering
     """
-    _sync_before()
-    result = generate_peptides(
-        maf_path=maf_path,
-        patient_id=patient_id if patient_id else None,
-        tpm_path=tpm_path if tpm_path else None,
-    )
-    _sync_after()
-    return result.model_dump()
+    try:
+        _sync_before()
+        result = generate_peptides(
+            maf_path=maf_path,
+            patient_id=patient_id if patient_id else None,
+            tpm_path=tpm_path if tpm_path else None,
+        )
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=3)
 
 
 # ── Stage 4: HLA Binding Prediction ─────────────────────────────────────────
@@ -232,40 +329,46 @@ async def stage4_predict_binding(
     Filters to strong binders: IC50 < 500nM or percentile rank < 0.5%.
     MHC Class I only.
 
+    ⚠️ This can take 5-15 minutes on GPU. For async execution, use
+    start_stage(stage=4, ...) instead.
+
     Args:
         peptides_path: Path to peptide candidates TSV from Stage 3
         hla_alleles: Comma-separated HLA-I alleles (e.g. "HLA-A*02:01,HLA-B*07:02")
         patient_id: Patient identifier
     """
-    alleles_list = [a.strip() for a in hla_alleles.split(",") if a.strip()]
-    pid = patient_id if patient_id else None
-
-    _sync_before()
-
-    # Try to dispatch to MHCflurry GPU container (preferred — faster + more reliable)
     try:
-        import modal
-        mhcflurry_fn = modal.Function.from_name("bloomone", "run_mhcflurry_remote")
-        print("Dispatching to MHCflurry GPU container...")
-        result_dict = mhcflurry_fn.remote(
+        alleles_list = [a.strip() for a in hla_alleles.split(",") if a.strip()]
+        pid = patient_id if patient_id else None
+
+        _sync_before()
+
+        # Try to dispatch to MHCflurry GPU container (preferred)
+        try:
+            import modal
+            mhcflurry_fn = modal.Function.from_name("bloomone", "run_mhcflurry_remote")
+            print("Dispatching to MHCflurry GPU container...")
+            result_dict = mhcflurry_fn.remote(
+                peptides_path=peptides_path,
+                hla_alleles=alleles_list,
+                patient_id=pid or "unknown",
+            )
+            _sync_after()
+            return result_dict
+        except Exception as e:
+            print(f"MHCflurry GPU dispatch failed: {e}")
+            print("Falling back to local prediction (IEDB API)...")
+
+        # Fallback: run locally
+        result = predict_binding(
             peptides_path=peptides_path,
             hla_alleles=alleles_list,
-            patient_id=pid or "unknown",
+            patient_id=pid,
         )
         _sync_after()
-        return result_dict
+        return result.model_dump()
     except Exception as e:
-        print(f"MHCflurry GPU dispatch failed: {e}")
-        print("Falling back to local prediction (IEDB API)...")
-
-    # Fallback: run locally (tries MHCflurry import, then IEDB)
-    result = predict_binding(
-        peptides_path=peptides_path,
-        hla_alleles=alleles_list,
-        patient_id=pid,
-    )
-    _sync_after()
-    return result.model_dump()
+        return wrap_stage_error(e, stage=4)
 
 
 # ── Stage 5: Safety Filter ──────────────────────────────────────────────────
@@ -288,13 +391,16 @@ async def stage5_safety_filter(
         binders_path: Path to binding predictions TSV from Stage 4
         patient_id: Patient identifier
     """
-    _sync_before()
-    result = filter_self_similarity(
-        binders_path=binders_path,
-        patient_id=patient_id if patient_id else None,
-    )
-    _sync_after()
-    return result.model_dump()
+    try:
+        _sync_before()
+        result = filter_self_similarity(
+            binders_path=binders_path,
+            patient_id=patient_id if patient_id else None,
+        )
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=5)
 
 
 # ── Stage 6: Candidate Ranking ───────────────────────────────────────────────
@@ -320,15 +426,18 @@ async def stage6_rank_candidates(
         tpm_path: Optional RNA-seq TPM file for expression weighting
         top_n: Number of top candidates to select (default 20)
     """
-    _sync_before()
-    result = rank_candidates(
-        safe_path=safe_path,
-        tpm_path=tpm_path if tpm_path else None,
-        patient_id=patient_id if patient_id else None,
-        top_n=top_n,
-    )
-    _sync_after()
-    return result.model_dump()
+    try:
+        _sync_before()
+        result = rank_candidates(
+            safe_path=safe_path,
+            tpm_path=tpm_path if tpm_path else None,
+            patient_id=patient_id if patient_id else None,
+            top_n=top_n,
+        )
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=6)
 
 
 # ── Stage 7: mRNA Construct Design ──────────────────────────────────────────
@@ -352,21 +461,25 @@ async def stage7_design_mrna(
     - 120nt poly-A tail
     - ViennaRNA MFE prediction (if available)
 
-    Output is ready for wet lab synthesis.
+    Output is ready for wet lab synthesis review.
+    ⚠️ All outputs are for RESEARCH USE ONLY.
 
     Args:
         ranked_path: Path to ranked candidates TSV from Stage 6
         patient_id: Patient identifier
         top_n: Number of constructs to design (default 20)
     """
-    _sync_before()
-    result = design_mrna(
-        ranked_path=ranked_path,
-        patient_id=patient_id if patient_id else None,
-        top_n=top_n,
-    )
-    _sync_after()
-    return result.model_dump()
+    try:
+        _sync_before()
+        result = design_mrna(
+            ranked_path=ranked_path,
+            patient_id=patient_id if patient_id else None,
+            top_n=top_n,
+        )
+        _sync_after()
+        return result.model_dump()
+    except Exception as e:
+        return wrap_stage_error(e, stage=7)
 
 
 # ── Pipeline Orchestrator ────────────────────────────────────────────────────
@@ -389,6 +502,9 @@ async def run_full_pipeline(
 
     For raw BAM input or data fetching, use the individual stage tools.
 
+    ⚠️ Use validate_inputs FIRST to check your inputs.
+    ⚠️ All outputs are for RESEARCH USE ONLY.
+
     Args:
         maf_path: Path to MAF file with somatic mutations
         hla_alleles: Comma-separated HLA-I alleles
@@ -396,123 +512,139 @@ async def run_full_pipeline(
         tpm_path: Optional RNA-seq TPM file
         top_n: Number of top candidates for mRNA design
     """
-    from bloomone.models import PipelineResult, DataSource, BindingResult
-
-    alleles_list = [a.strip() for a in hla_alleles.split(",") if a.strip()]
-    tpm = tpm_path if tpm_path else None
-    stages_completed = []
-
-    _sync_before()
-
-    # Stage 3: Peptide Generation
-    print("=" * 60)
-    print("STAGE 3: Peptide Generation")
-    print("=" * 60)
-    peptide_result = generate_peptides(
-        maf_path=maf_path, patient_id=patient_id, tpm_path=tpm
-    )
-    stages_completed.append(3)
-
-    # Commit so GPU container can see the peptides file
-    _sync_after()
-
-    # Stage 4: HLA Binding Prediction (GPU dispatch preferred)
-    print("\n" + "=" * 60)
-    print("STAGE 4: HLA Binding Prediction")
-    print("=" * 60)
-
-    binding_result = None
     try:
-        import modal as _modal
-        mhcflurry_fn = _modal.Function.from_name("bloomone", "run_mhcflurry_remote")
-        print("Dispatching to MHCflurry GPU container...")
-        binding_dict = mhcflurry_fn.remote(
-            peptides_path=peptide_result.candidates_path,
-            hla_alleles=alleles_list,
+        from bloomone.models import PipelineResult, DataSource, BindingResult
+
+        alleles_list = [a.strip() for a in hla_alleles.split(",") if a.strip()]
+        tpm = tpm_path if tpm_path else None
+        stages_completed = []
+        all_warnings = []
+
+        _sync_before()
+
+        # Stage 3: Peptide Generation
+        print("=" * 60)
+        print("STAGE 3: Peptide Generation")
+        print("=" * 60)
+        peptide_result = generate_peptides(
+            maf_path=maf_path, patient_id=patient_id, tpm_path=tpm
+        )
+        stages_completed.append(3)
+        all_warnings.extend(peptide_result.warnings)
+
+        # Commit so GPU container can see the peptides file
+        _sync_after()
+
+        # Stage 4: HLA Binding Prediction (GPU dispatch preferred)
+        print("\n" + "=" * 60)
+        print("STAGE 4: HLA Binding Prediction")
+        print("=" * 60)
+
+        binding_result = None
+        try:
+            import modal as _modal
+            mhcflurry_fn = _modal.Function.from_name("bloomone", "run_mhcflurry_remote")
+            print("Dispatching to MHCflurry GPU container...")
+            binding_dict = mhcflurry_fn.remote(
+                peptides_path=peptide_result.candidates_path,
+                hla_alleles=alleles_list,
+                patient_id=patient_id,
+            )
+            binding_result = BindingResult(**binding_dict)
+        except Exception as e:
+            print(f"GPU dispatch failed: {e}")
+            print("Falling back to local prediction...")
+            binding_result = predict_binding(
+                peptides_path=peptide_result.candidates_path,
+                hla_alleles=alleles_list,
+                patient_id=patient_id,
+            )
+        stages_completed.append(4)
+        all_warnings.extend(binding_result.warnings)
+
+        # Reload volume to see GPU-written binding results
+        _sync_before()
+
+        # Stage 5: Safety Filter
+        print("\n" + "=" * 60)
+        print("STAGE 5: Safety Filter")
+        print("=" * 60)
+        safety_result = filter_self_similarity(
+            binders_path=binding_result.predictions_path,
             patient_id=patient_id,
         )
-        binding_result = BindingResult(**binding_dict)
+        stages_completed.append(5)
+        all_warnings.extend(safety_result.warnings)
+
+        # Stage 6: Candidate Ranking
+        print("\n" + "=" * 60)
+        print("STAGE 6: Candidate Ranking")
+        print("=" * 60)
+        ranking_result = rank_candidates(
+            safe_path=safety_result.safe_path,
+            tpm_path=tpm,
+            patient_id=patient_id,
+            top_n=top_n,
+        )
+        stages_completed.append(6)
+        all_warnings.extend(ranking_result.warnings)
+
+        # Stage 7: mRNA Design
+        print("\n" + "=" * 60)
+        print("STAGE 7: mRNA Construct Design")
+        print("=" * 60)
+        mrna_result = design_mrna(
+            ranked_path=ranking_result.ranked_path,
+            patient_id=patient_id,
+            top_n=top_n,
+        )
+        stages_completed.append(7)
+        all_warnings.extend(mrna_result.warnings)
+
+        # Final commit
+        _sync_after()
+
+        # Build summary
+        summary = (
+            f"Pipeline complete for {patient_id}. "
+            f"{peptide_result.total_candidates} peptides generated from "
+            f"{peptide_result.genes_affected} genes → "
+            f"{binding_result.strong_binders} strong binders → "
+            f"{safety_result.total_safe} safe candidates → "
+            f"top {ranking_result.total_ranked} ranked → "
+            f"{mrna_result.total_designed} mRNA constructs designed."
+        )
+
+        # Build final result
+        pipeline_result = PipelineResult(
+            patient_id=patient_id,
+            data_source=DataSource.LOCAL,
+            hla_alleles=alleles_list,
+            total_mutations=peptide_result.total_candidates,
+            total_peptides=peptide_result.unique_peptides,
+            strong_binders=binding_result.strong_binders,
+            safe_candidates=safety_result.total_safe,
+            top_n_ranked=ranking_result.total_ranked,
+            mrna_constructs=mrna_result.total_designed,
+            expression_validated=tpm is not None,
+            stages_completed=stages_completed,
+            stages_skipped=[1, 2],
+            output_paths={
+                "peptides": peptide_result.candidates_path,
+                "binding": binding_result.predictions_path,
+                "safety": safety_result.safe_path,
+                "ranked": ranking_result.ranked_path,
+                "mrna": mrna_result.constructs_path,
+            },
+            summary=summary,
+            warnings=all_warnings,
+        )
+
+        print("\n" + "=" * 60)
+        print("PIPELINE COMPLETE")
+        print("=" * 60)
+        print(summary)
+
+        return pipeline_result.model_dump()
     except Exception as e:
-        print(f"GPU dispatch failed: {e}")
-        print("Falling back to local prediction...")
-        binding_result = predict_binding(
-            peptides_path=peptide_result.candidates_path,
-            hla_alleles=alleles_list,
-            patient_id=patient_id,
-        )
-    stages_completed.append(4)
-
-    # Reload volume to see GPU-written binding results
-    _sync_before()
-
-    # Stage 5: Safety Filter
-    print("\n" + "=" * 60)
-    print("STAGE 5: Safety Filter")
-    print("=" * 60)
-    safety_result = filter_self_similarity(
-        binders_path=binding_result.predictions_path,
-        patient_id=patient_id,
-    )
-    stages_completed.append(5)
-
-    # Stage 6: Candidate Ranking
-    print("\n" + "=" * 60)
-    print("STAGE 6: Candidate Ranking")
-    print("=" * 60)
-    ranking_result = rank_candidates(
-        safe_path=safety_result.safe_path,
-        tpm_path=tpm,
-        patient_id=patient_id,
-        top_n=top_n,
-    )
-    stages_completed.append(6)
-
-    # Stage 7: mRNA Design
-    print("\n" + "=" * 60)
-    print("STAGE 7: mRNA Construct Design")
-    print("=" * 60)
-    mrna_result = design_mrna(
-        ranked_path=ranking_result.ranked_path,
-        patient_id=patient_id,
-        top_n=top_n,
-    )
-    stages_completed.append(7)
-
-    # Final commit
-    _sync_after()
-
-    # Build final result
-    pipeline_result = PipelineResult(
-        patient_id=patient_id,
-        data_source=DataSource.LOCAL,
-        hla_alleles=alleles_list,
-        total_mutations=peptide_result.total_candidates,
-        total_peptides=peptide_result.unique_peptides,
-        strong_binders=binding_result.strong_binders,
-        safe_candidates=safety_result.total_safe,
-        top_n_ranked=ranking_result.total_ranked,
-        mrna_constructs=mrna_result.total_designed,
-        expression_validated=tpm is not None,
-        stages_completed=stages_completed,
-        stages_skipped=[1, 2],
-        output_paths={
-            "peptides": peptide_result.candidates_path,
-            "binding": binding_result.predictions_path,
-            "safety": safety_result.safe_path,
-            "ranked": ranking_result.ranked_path,
-            "mrna": mrna_result.constructs_path,
-        },
-    )
-
-    print("\n" + "=" * 60)
-    print("PIPELINE COMPLETE")
-    print("=" * 60)
-    print(f"Patient: {patient_id}")
-    print(f"Mutations → Peptides: {peptide_result.total_candidates}")
-    print(f"Strong binders: {binding_result.strong_binders}")
-    print(f"Safe candidates: {safety_result.total_safe}")
-    print(f"Top ranked: {ranking_result.total_ranked}")
-    print(f"mRNA constructs: {mrna_result.total_designed}")
-    print(f"✅ Ready for wet lab synthesis!")
-
-    return pipeline_result.model_dump()
+        return wrap_stage_error(e, stage=0)

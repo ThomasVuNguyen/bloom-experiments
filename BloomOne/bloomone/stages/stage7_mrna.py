@@ -228,7 +228,43 @@ def design_mrna(
     print(f"\n✅ Designed {len(constructs)} mRNA constructs")
     print(f"Saved to {output_path}")
 
+    # Build summary
+    gc_range = ""
+    if constructs:
+        gc_vals = [c.gc_content for c in constructs]
+        gc_range = f" GC content: {min(gc_vals):.1f}-{max(gc_vals):.1f}%."
+
+    premature_stops = [c for c in constructs if c.has_premature_stop]
+    warnings = []
+    if premature_stops:
+        warnings.append(
+            f"{len(premature_stops)} construct(s) have premature stop codons — "
+            "review before synthesis."
+        )
+
     return MRNAResult(
+        stage=7,
+        stage_name="mRNA Construct Design",
+        summary=(
+            f"Designed {len(constructs)} individual mRNA constructs"
+            + (f" + 1 polytope ({polytope_length} nt)" if polytope_length else "")
+            + f".{gc_range}"
+            + (" Ready for wet lab synthesis review." if constructs else "")
+        ),
+        next_action=(
+            "Pipeline complete. All results are for RESEARCH USE ONLY. "
+            "Review mRNA constructs and proceed to wet lab synthesis validation."
+        ),
+        provenance={
+            "codon_table": "human_optimized",
+            "signal_peptide": "tPA",
+            "linker": "AAY",
+            "utr_5": "beta-globin",
+            "utr_3": "alpha-globin",
+            "poly_a_length": POLY_A_LENGTH,
+            "vienna_rna_available": any(c.mfe is not None for c in constructs),
+        },
+        warnings=warnings,
         patient_id=patient_id,
         constructs=constructs,
         constructs_path=output_path,

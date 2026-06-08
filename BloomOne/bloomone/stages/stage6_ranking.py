@@ -191,7 +191,43 @@ def rank_candidates(
         out_df = pd.DataFrame([c.model_dump() for c in ranked_candidates])
         out_df.to_csv(output_path, sep="\t", index=False)
 
+    # Build summary with best candidate info
+    best_summary = ""
+    if ranked_candidates:
+        best = ranked_candidates[0]
+        best_summary = (
+            f" Best: {best.gene} {best.hgvsp_short} → {best.allele} "
+            f"(IC50: {best.ic50:.0f}nM, score: {best.composite_score:.3f})."
+        )
+
     return RankingResult(
+        stage=6,
+        stage_name="Candidate Ranking",
+        summary=(
+            f"Top {len(ranked_candidates)} candidates selected from "
+            f"{total_input} safe candidates.{best_summary}"
+            + (
+                " Expression NOT validated — using degraded weights."
+                if not expression_available else ""
+            )
+        ),
+        next_action=(
+            f"Proceed to stage7_design_mrna with ranked_path='{output_path}' "
+            f"and patient_id='{patient_id}'"
+            if ranked_candidates
+            else "No candidates to rank. Pipeline cannot continue."
+        ),
+        provenance={
+            "weights": weights,
+            "expression_validated": expression_available,
+            "scoring": "composite (lower = better candidate)",
+            "features": ["IC50 percentile rank", "VAF", "TPM (if available)"],
+        },
+        warnings=(
+            ["Expression data not available — ranking uses degraded weights "
+             "(IC50 60%, VAF 40%). Provide RNA-seq TPM for better ranking."]
+            if not expression_available else []
+        ),
         patient_id=patient_id,
         ranked_candidates=ranked_candidates,
         ranked_path=output_path,

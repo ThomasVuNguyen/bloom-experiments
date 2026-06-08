@@ -181,6 +181,31 @@ def filter_self_similarity(
         pd.DataFrame(flagged_rows).to_csv(flagged_path, sep="\t", index=False)
 
     return SafetyResult(
+        stage=5,
+        stage_name="Safety Filter",
+        summary=(
+            f"Removed {len(flagged_peptides)} peptides matching self-proteome "
+            f"({exact_removed} exact matches), {len(safe_candidates)} candidates remain. "
+            f"Checked against {len(proteome_records)} human proteins."
+        ),
+        next_action=(
+            f"Proceed to stage6_rank_candidates with safe_path='{output_path}' "
+            f"and patient_id='{patient_id}'"
+            if safe_candidates
+            else "No safe candidates remain after filtering. Pipeline cannot continue."
+        ),
+        provenance={
+            "identity_threshold": identity_threshold,
+            "proteome_size": len(proteome_records),
+            "proteome_source": "UniProt UP000005640 (reviewed)",
+            "exact_matches_removed": exact_removed,
+            "partial_matches_removed": partial_removed,
+            "method": "exact substring + sliding window identity",
+        },
+        warnings=(
+            ["No safe candidates remain — all peptides matched human proteome."]
+            if not safe_candidates else []
+        ),
         patient_id=patient_id,
         safe_candidates=safe_candidates,
         safe_path=output_path,

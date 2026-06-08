@@ -121,6 +121,23 @@ def call_mutations(
     mutations = _parse_strelka_vcf(vcf_path, patient_id)
 
     return MutationResult(
+        stage=2,
+        stage_name="Mutation Calling",
+        summary=(
+            f"Strelka2 somatic calling complete for {patient_id}. "
+            f"Found {len(mutations)} somatic mutations "
+            f"({sum(1 for m in mutations if m.variant_classification == 'Missense_Mutation')} missense)."
+        ),
+        next_action=(
+            f"Proceed to stage3_generate_peptides with maf_path='{vcf_path}' "
+            f"and patient_id='{patient_id}'"
+        ),
+        provenance={
+            "tool": "Strelka2",
+            "vcpus": 96,
+            "reference": "hg38",
+            "filter": "PASS only",
+        },
         patient_id=patient_id,
         mutations=mutations,
         mutations_path=vcf_path,
@@ -194,6 +211,17 @@ def _load_existing_maf(patient_data: PatientData) -> MutationResult:
     print(f"Loaded {len(mutations)} mutations ({missense_count} missense)")
 
     return MutationResult(
+        stage=2,
+        stage_name="Mutation Calling",
+        summary=(
+            f"Loaded {len(mutations)} pre-called mutations ({missense_count} missense) "
+            f"from existing MAF. Stage 2 skipped."
+        ),
+        next_action=(
+            f"Proceed to stage3_generate_peptides with maf_path='{maf_path}' "
+            f"and patient_id='{patient_id}'"
+        ),
+        provenance={"source": "pre-called MAF", "skipped": True},
         patient_id=patient_id,
         mutations=mutations,
         mutations_path=maf_path,

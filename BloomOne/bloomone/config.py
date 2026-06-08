@@ -4,12 +4,19 @@ Shared configuration — Modal volumes, paths, API endpoints, constants.
 
 import modal
 
+# ── Version ──────────────────────────────────────────────────────────────────
+
+BLOOMONE_VERSION = "4.0.0"
+
 # ── Modal Resources ──────────────────────────────────────────────────────────
 
 APP_NAME = "bloomone"
 
 # Single shared volume for all pipeline data
 volume = modal.Volume.from_name("bloomone-data", create_if_missing=True)
+
+# Distributed KV store for job state and pipeline tracking
+state_store = modal.Dict.from_name("bloomone-state", create_if_missing=True)
 
 # Mount point inside containers
 VOLUME_MOUNT = "/data"

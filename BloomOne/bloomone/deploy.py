@@ -122,6 +122,8 @@ def run_strelka2(tumor_bam: str, normal_bam: str, patient_id: str) -> dict:
     from bloomone.stages.stage2_mutations import call_mutations
 
     patient_data = PatientData(
+        stage=2,
+        stage_name="Mutation Calling",
         patient_id=patient_id,
         tumor_path=tumor_bam,
         normal_path=normal_bam,

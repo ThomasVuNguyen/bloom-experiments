@@ -212,6 +212,12 @@ def predict_binding(
         output_path = os.path.join(PATHS["stage4"], f"{patient_id}_binding.tsv")
         os.makedirs(PATHS["stage4"], exist_ok=True)
         return BindingResult(
+            stage=4,
+            stage_name="HLA Binding Prediction",
+            summary="No binding predictions obtained. Both MHCflurry and IEDB API failed.",
+            next_action="Check HLA allele format and retry. Use validate_inputs for pre-flight checks.",
+            provenance={"method": method, "alleles": hla_alleles},
+            warnings=["No binding predictions — pipeline cannot continue without binders."],
             patient_id=patient_id,
             predictions=[],
             predictions_path=output_path,
@@ -270,6 +276,31 @@ def predict_binding(
         out_df.to_csv(output_path, sep="\t", index=False)
 
     return BindingResult(
+        stage=4,
+        stage_name="HLA Binding Prediction",
+        summary=(
+            f"{len(predictions)}/{len(merged)} peptides are strong binders "
+            f"(IC50 < {IC50_THRESHOLD}nM or rank < {RANK_THRESHOLD}%). "
+            f"Method: {method}. Alleles: {', '.join(hla_alleles)}."
+        ),
+        next_action=(
+            f"Proceed to stage5_safety_filter with binders_path='{output_path}' "
+            f"and patient_id='{patient_id}'"
+            if predictions
+            else "No strong binders found. Pipeline cannot continue."
+        ),
+        provenance={
+            "method": method,
+            "ic50_threshold_nm": IC50_THRESHOLD,
+            "rank_threshold_pct": RANK_THRESHOLD,
+            "alleles_used": hla_alleles,
+            "total_scored": len(merged),
+            "discarded": len(merged) - len(predictions),
+        },
+        warnings=(
+            ["No strong binders found — all peptides had IC50 > 500nM."]
+            if not predictions else []
+        ),
         patient_id=patient_id,
         predictions=predictions,
         predictions_path=output_path,

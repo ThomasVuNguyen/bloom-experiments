@@ -272,14 +272,53 @@ def generate_peptides(
         df_out.to_csv(output_path, sep="\t", index=False)
 
     unique_peptides = len(set(c.peptide for c in candidates))
-    print(f"\nDone. Generated {len(candidates)} candidates ({unique_peptides} unique peptides)")
+    genes_affected = len(set(c.gene for c in candidates))
+    print(f"\nDone. Generated {len(candidates)} candidates ({unique_peptides} unique peptides) across {genes_affected} genes")
     print(f"Skipped {skipped} unparseable/unfetchable mutations")
 
+    warnings = []
+    if not candidates:
+        warnings.append(
+            "No peptides generated. This may mean the MAF has no missense "
+            "mutations, or protein sequences could not be fetched from "
+            "UniProt/Ensembl. Check the MAF with inspect_artifact."
+        )
+    if skipped > 0:
+        warnings.append(
+            f"{skipped} mutations were skipped (unparseable protein change "
+            f"or protein sequence not found)."
+        )
+
     return PeptideResult(
+        stage=3,
+        stage_name="Peptide Generation",
+        summary=(
+            f"Generated {len(candidates)} candidate peptides "
+            f"({unique_peptides} unique) from {len(missense)} missense "
+            f"mutations across {genes_affected} genes."
+            + (f" {skipped} mutations skipped." if skipped > 0 else "")
+            + (f" Expression-filtered (TPM ≥ {TPM_THRESHOLD})." if expression_validated else "")
+        ),
+        next_action=(
+            f"Proceed to stage4_predict_binding with peptides_path='{output_path}' "
+            f"and hla_alleles='<your HLA alleles>'"
+            if candidates
+            else "No peptides generated — check MAF input with inspect_artifact."
+        ),
+        provenance={
+            "kmer_lengths": kmer_lengths,
+            "missense_mutations_input": len(missense),
+            "expression_filtered": expression_validated,
+            "tpm_threshold": TPM_THRESHOLD if expression_validated else None,
+            "vep_annotated": len(vep_annotations),
+            "skipped_mutations": skipped,
+        },
+        warnings=warnings,
         patient_id=patient_id,
         candidates=candidates,
         candidates_path=output_path,
         total_candidates=len(candidates),
         unique_peptides=unique_peptides,
+        genes_affected=genes_affected,
         skipped_mutations=skipped,
     )

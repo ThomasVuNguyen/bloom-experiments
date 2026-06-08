@@ -1,5 +1,8 @@
 """
 Pydantic models for type-safe stage input/output across the pipeline.
+
+Every stage result inherits from StageResponse, ensuring all tool outputs
+include: summary, next_action, provenance, warnings, and research_use_only.
 """
 
 from __future__ import annotations
@@ -10,6 +13,35 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 
+# ── Agent-Friendly Base ─────────────────────────────────────────────────────
+
+
+class StageResponse(BaseModel):
+    """Base model for all stage outputs — ensures agent-friendly metadata."""
+    stage: int = Field(description="Stage number (1-7)")
+    stage_name: str = Field(description="Human-readable stage name")
+    summary: str = Field(
+        default="",
+        description="Human-readable summary of what happened in this stage",
+    )
+    next_action: str = Field(
+        default="",
+        description="What the agent should do next (tool name + key args)",
+    )
+    research_use_only: bool = Field(
+        default=True,
+        description="Always true — results are for research use only, not clinical advice",
+    )
+    provenance: dict = Field(
+        default_factory=dict,
+        description="Scientific provenance: tool versions, thresholds, counts, filters",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Warnings or issues the agent should surface to the user",
+    )
+
+
 class DataSource(str, Enum):
     """Where the input data comes from."""
     LOCAL = "local"
@@ -17,7 +49,7 @@ class DataSource(str, Enum):
     CBIO = "cbio"
 
 
-class PatientData(BaseModel):
+class PatientData(StageResponse):
     """Stage 1 output — ingested patient data."""
     patient_id: str
     tumor_path: str = Field(description="Path to tumor BAM/FASTQ on volume")
@@ -42,6 +74,15 @@ class PatientData(BaseModel):
         default=False,
         description="True if RNA-seq TPM was available and used",
     )
+    # ── Agent branching flags ──
+    requires_optitype: bool = Field(
+        default=False,
+        description="True if HLA alleles are missing and OptiType is needed",
+    )
+    skip_stage2: bool = Field(
+        default=False,
+        description="True if MAF is pre-called — skip Stage 2 entirely",
+    )
 
 
 class SomaticMutation(BaseModel):
@@ -61,7 +102,7 @@ class SomaticMutation(BaseModel):
     t_alt_count: Optional[int] = None
 
 
-class MutationResult(BaseModel):
+class MutationResult(StageResponse):
     """Stage 2 output — somatic mutations."""
     patient_id: str
     mutations: list[SomaticMutation]
@@ -92,13 +133,14 @@ class PeptideCandidate(BaseModel):
     vep_consequence: Optional[str] = None
 
 
-class PeptideResult(BaseModel):
+class PeptideResult(StageResponse):
     """Stage 3 output — candidate peptides."""
     patient_id: str
     candidates: list[PeptideCandidate]
     candidates_path: str
     total_candidates: int = 0
     unique_peptides: int = 0
+    genes_affected: int = 0
     skipped_mutations: int = 0
 
 
@@ -121,7 +163,7 @@ class BindingPrediction(BaseModel):
     tumor_vaf: Optional[float] = None
 
 
-class BindingResult(BaseModel):
+class BindingResult(StageResponse):
     """Stage 4 output — binding predictions."""
     patient_id: str
     predictions: list[BindingPrediction]
@@ -147,7 +189,7 @@ class SafeCandidate(BaseModel):
     )
 
 
-class SafetyResult(BaseModel):
+class SafetyResult(StageResponse):
     """Stage 5 output — safety-filtered candidates."""
     patient_id: str
     safe_candidates: list[SafeCandidate]
@@ -176,7 +218,7 @@ class RankedCandidate(BaseModel):
     expression_validated: bool = False
 
 
-class RankingResult(BaseModel):
+class RankingResult(StageResponse):
     """Stage 6 output — ranked candidates."""
     patient_id: str
     ranked_candidates: list[RankedCandidate]
@@ -207,7 +249,7 @@ class MRNAConstruct(BaseModel):
     )
 
 
-class MRNAResult(BaseModel):
+class MRNAResult(StageResponse):
     """Stage 7 output — mRNA constructs."""
     patient_id: str
     constructs: list[MRNAConstruct]
@@ -234,3 +276,6 @@ class PipelineResult(BaseModel):
     stages_completed: list[int] = []
     stages_skipped: list[int] = []
     output_paths: dict[str, str] = {}
+    summary: str = ""
+    research_use_only: bool = True
+    warnings: list[str] = []
