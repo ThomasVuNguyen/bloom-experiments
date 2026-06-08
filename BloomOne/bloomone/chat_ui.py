@@ -57,7 +57,7 @@ def create_app(
     import os
 
     import gradio as gr
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Header as fastapi_Header
     from openai import OpenAI
 
     from bloomone.chat import SYSTEM_PROMPT, TOOL_LABELS, run_chat_turn
@@ -288,29 +288,23 @@ def create_app(
         allow_headers=["*"],
     )
 
-    from starlette.responses import RedirectResponse, JSONResponse
-    from starlette.requests import Request
-
     # API key for REST endpoint auth (set via Modal secret)
     _api_key = os.environ.get("BLOOMONE_API_KEY", "")
 
-    def _check_auth(request: Request):
-        """Validate Bearer token against BLOOMONE_API_KEY."""
-        auth = request.headers.get("authorization", "")
-        if not _api_key or not auth.startswith("Bearer "):
-            return False
-        return auth[7:] == _api_key
+    from starlette.responses import RedirectResponse, JSONResponse
+    from starlette.routing import Route
 
-    @fastapi_app.get("/v1/health")
-    async def health():
-        return {"status": "ok", "model": model_name}
+    async def _health(request):
+        return JSONResponse({"status": "ok", "model": model_name})
 
-    @fastapi_app.post("/v1/chat")
-    async def chat_api(request: Request):
-        if not _check_auth(request):
-            return JSONResponse(
-                {"error": "Unauthorized"}, status_code=401
-            )
+    async def _chat(request):
+        # Auth check
+        if _api_key:
+            auth = request.headers.get("authorization", "")
+            if not auth.startswith("Bearer ") or auth[7:] != _api_key:
+                return JSONResponse(
+                    {"error": "Unauthorized"}, status_code=401
+                )
 
         body = await request.json()
         messages = body.get("messages", [])
@@ -332,14 +326,21 @@ def create_app(
             elif update["type"] == "error":
                 final_text = f"❌ {update['content']}"
 
-        return {
+        return JSONResponse({
             "response": final_text,
             "status_updates": status_updates,
             "updated_messages": llm_messages[1:],
-        }
+        })
 
-    @fastapi_app.get("/")
-    async def root():
+    async def _root(request):
         return RedirectResponse(url="/chat")
 
-    return gr.mount_gradio_app(fastapi_app, demo, path="/chat")
+    # Mount Gradio first
+    app = gr.mount_gradio_app(fastapi_app, demo, path="/chat")
+
+    # Add REST routes AFTER Gradio mount (prepend so they take priority)
+    app.routes.insert(0, Route("/v1/health", _health, methods=["GET"]))
+    app.routes.insert(0, Route("/v1/chat", _chat, methods=["POST"]))
+    app.routes.insert(0, Route("/", _root, methods=["GET"]))
+
+    return app
