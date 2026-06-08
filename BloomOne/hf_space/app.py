@@ -147,42 +147,6 @@ CUSTOM_CSS = """
     margin: 2px 4px;
 }
 
-/* Upload progress bar */
-#upload-progress-container {
-    display: none;
-    margin: 8px 0;
-    padding: 10px 16px;
-    background: rgba(100, 100, 255, 0.08);
-    border: 1px solid rgba(100, 100, 255, 0.2);
-    border-radius: 12px;
-}
-#upload-progress-container.active { display: block; }
-#upload-progress-label {
-    font-size: 0.85em;
-    color: #a0a0d0;
-    margin-bottom: 6px;
-}
-#upload-progress-bar-bg {
-    width: 100%;
-    height: 8px;
-    background: rgba(255,255,255,0.08);
-    border-radius: 4px;
-    overflow: hidden;
-}
-#upload-progress-bar {
-    height: 100%;
-    width: 0%;
-    background: linear-gradient(90deg, #6366f1, #8b5cf6, #a78bfa);
-    border-radius: 4px;
-    transition: width 0.2s ease;
-}
-#upload-progress-pct {
-    font-size: 0.8em;
-    color: #b8b8d0;
-    text-align: right;
-    margin-top: 4px;
-}
-
 .upload-status p {
     font-size: 0.85em;
     padding: 6px 12px;
@@ -195,132 +159,12 @@ CUSTOM_CSS = """
 footer { display: none !important; }
 """
 
-CUSTOM_JS = """
-() => {
-    // Create the progress overlay
-    const container = document.createElement('div');
-    container.id = 'upload-progress-container';
-    container.innerHTML = `
-        <div id="upload-progress-label">📤 Uploading file...</div>
-        <div id="upload-progress-bar-bg">
-            <div id="upload-progress-bar"></div>
-        </div>
-        <div id="upload-progress-pct">Starting upload...</div>
-    `;
 
-    let inserted = false;
-    let uploadStartTime = null;
-    let animFrame = null;
-    let isUploading = false;
-
-    function insertContainer() {
-        if (inserted) return;
-        // Find the gradio container area
-        const target = document.querySelector('.disclaimer-bar')
-                    || document.querySelector('.upload-status')
-                    || document.querySelector('.examples');
-        if (target && target.parentNode) {
-            target.parentNode.insertBefore(container, target);
-            inserted = true;
-        }
-    }
-
-    function startUploadUI() {
-        if (isUploading) return;
-        isUploading = true;
-        insertContainer();
-        uploadStartTime = Date.now();
-        container.classList.add('active');
-
-        const bar = document.getElementById('upload-progress-bar');
-        const pct = document.getElementById('upload-progress-pct');
-        const label = document.getElementById('upload-progress-label');
-
-        // Animated indeterminate progress that slows down
-        function animate() {
-            if (!isUploading) return;
-            const elapsed = (Date.now() - uploadStartTime) / 1000;
-            const mins = Math.floor(elapsed / 60);
-            const secs = Math.floor(elapsed % 60);
-            const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-
-            // Asymptotic progress: approaches 99% slowly over minutes
-            const fakePercent = Math.min(99, Math.round(100 * (1 - Math.exp(-elapsed / 120))));
-            if (bar) bar.style.width = fakePercent + '%';
-            if (pct) pct.textContent = `~${fakePercent}% • ${timeStr} elapsed`;
-            if (label) label.textContent = '📤 Uploading file to server...';
-
-            animFrame = requestAnimationFrame(animate);
-        }
-        animate();
-    }
-
-    function stopUploadUI(success) {
-        isUploading = false;
-        if (animFrame) cancelAnimationFrame(animFrame);
-
-        const bar = document.getElementById('upload-progress-bar');
-        const pct = document.getElementById('upload-progress-pct');
-        const label = document.getElementById('upload-progress-label');
-
-        if (success) {
-            if (bar) bar.style.width = '100%';
-            if (label) label.textContent = '✅ Upload complete!';
-            const elapsed = uploadStartTime ? ((Date.now() - uploadStartTime) / 1000).toFixed(1) : '?';
-            if (pct) pct.textContent = `Done in ${elapsed}s`;
-        } else {
-            if (label) label.textContent = '❌ Upload failed';
-            if (pct) pct.textContent = '';
-        }
-
-        setTimeout(() => {
-            container.classList.remove('active');
-            if (bar) bar.style.width = '0%';
-        }, 3000);
-    }
-
-    // Watch for Gradio's upload indicators in the DOM
-    const observer = new MutationObserver((mutations) => {
-        // Look for upload state changes
-        const fileAreas = document.querySelectorAll('[data-testid="file"], .file-preview, .upload-text');
-        const allText = document.body.innerText;
-
-        // Detect "Uploading" text appearing in file component
-        const uploadingEls = document.querySelectorAll('.uploading, .progress-text, .file-upload');
-        let foundUploading = false;
-
-        // Check all text nodes for "Uploading" in the file area
-        document.querySelectorAll('span, p, div').forEach(el => {
-            const t = el.textContent || '';
-            if (t.includes('Uploading') && t.includes('file') && el.offsetParent !== null) {
-                foundUploading = true;
-            }
-        });
-
-        if (foundUploading && !isUploading) {
-            startUploadUI();
-        } else if (!foundUploading && isUploading) {
-            stopUploadUI(true);
-        }
-    });
-
-    // Start observing after Gradio renders
-    setTimeout(() => {
-        insertContainer();
-        observer.observe(document.body, {
-            childList: true,
-            subtree: true,
-            characterData: true,
-        });
-    }, 2000);
-}
-"""
 
 with gr.Blocks(
     title="BloomOne — AI Neoantigen Vaccine Design",
     theme=gr.themes.Soft(),
     css=CUSTOM_CSS,
-    js=CUSTOM_JS,
 ) as demo:
 
     # ── Header ───────────────────────────────────────────────────────
@@ -422,7 +266,7 @@ with gr.Blocks(
         size_mb = file_size / (1024 * 1024)
         filename = pathlib.Path(file).name
 
-        progress(0.3, desc=f"📤 Forwarding {filename} ({size_mb:.1f} MB) to backend...")
+        progress(0, desc=f"📤 Forwarding {filename} ({size_mb:.1f} MB) to backend...")
 
         result = upload_to_backend(file)
 
