@@ -70,7 +70,7 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
       <input
         ref={inputRef}
         type="file"
-        accept=".maf,.vcf,.tsv,.csv,.txt"
+        accept=".maf,.vcf,.tsv,.csv,.txt,.pdf,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.dcm,.doc,.docx,.xlsx"
         onChange={handleInputChange}
         className="hidden"
       />
@@ -127,7 +127,7 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
           </svg>
         )}
         <span className="hidden sm:inline">
-          {uploading ? "Uploading..." : "Attach MAF"}
+          {uploading ? "Uploading..." : "Attach file"}
         </span>
       </button>
     </>

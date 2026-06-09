@@ -1,0 +1,96 @@
+// BloomOne Database Schema
+// PostgreSQL via Coolify + Prisma ORM
+
+datasource db {
+  provider = "postgresql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// ── Patients ─────────────────────────────────────────────────────────────────
+
+model Patient {
+  id         String        @id @default(cuid())
+  name       String
+  dob        DateTime?
+  details    Json          @default("{}")
+  hlaAlleles String[]      @default([])
+
+  notes PatientNote[]
+  files PatientFile[]
+  runs  PipelineRun[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+  @@index([dob])
+}
+
+model PatientNote {
+  id        String   @id @default(cuid())
+  content   String
+  source    String   @default("agent") // "agent" | "user"
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+}
+
+model PatientFile {
+  id        String   @id @default(cuid())
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId String
+  filename  String
+  fileType  String // "image" | "pdf" | "genomic" | "document" | "dicom"
+  mimeType  String
+  sizeBytes Int
+  blobPath  String // /app/data/uploads/{id}/{filename}
+  notes     String   @default("")
+  createdAt DateTime @default(now())
+
+  @@index([patientId])
+  @@index([fileType])
+}
+
+model PipelineRun {
+  id              String    @id @default(cuid())
+  patient         Patient   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientId       String
+  stagesCompleted Int[]     @default([])
+  summary         String    @default("")
+  outputPaths     Json      @default("{}")
+  warnings        String[]  @default([])
+  startedAt       DateTime  @default(now())
+  completedAt     DateTime?
+
+  @@index([patientId])
+}
+
+// ── Chats (migrated from JSON-on-disk) ───────────────────────────────────────
+
+model Chat {
+  id          String   @id
+  title       String   @default("New Chat")
+  customTitle Boolean  @default(false)
+  messages    Json     @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+// ── Uploaded Files (migrated from JSON-on-disk) ──────────────────────────────
+
+model UploadedFile {
+  id         String   @id
+  filename   String
+  sizeBytes  Int
+  mimeType   String
+  status     String   @default("uploaded")
+  tags       String[] @default([])
+  blobPath   String
+  resultPath String?
+  createdAt  DateTime @default(now())
+}

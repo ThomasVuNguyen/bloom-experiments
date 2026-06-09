@@ -1,40 +1,16 @@
 import { NextResponse } from "next/server";
-import { readdir, readFile, writeFile, mkdir } from "fs/promises";
-import { join } from "path";
-import { existsSync } from "fs";
-
-const CHATS_DIR = process.env.CHATS_DIR || "/app/data/chats";
-
-async function ensureDir() {
-  if (!existsSync(CHATS_DIR)) {
-    await mkdir(CHATS_DIR, { recursive: true });
-  }
-}
+import { prisma } from "@/lib/prisma";
 
 /** GET /api/chats — list all chat sessions */
 export async function GET() {
   try {
-    await ensureDir();
-    const files = await readdir(CHATS_DIR);
-    const chats = [];
+    const chats = await prisma.chat.findMany({
+      orderBy: { updatedAt: "desc" },
+    });
 
-    for (const file of files) {
-      if (!file.endsWith(".json")) continue;
-      try {
-        const raw = await readFile(join(CHATS_DIR, file), "utf-8");
-        chats.push(JSON.parse(raw));
-      } catch {
-        // Skip corrupted files
-      }
-    }
-
-    // Sort newest first
-    chats.sort(
-      (a: { updatedAt: number }, b: { updatedAt: number }) =>
-        b.updatedAt - a.updatedAt,
-    );
     return NextResponse.json(chats);
-  } catch {
+  } catch (error) {
+    console.error("List chats error:", error);
     return NextResponse.json([], { status: 200 });
   }
 }
@@ -42,15 +18,27 @@ export async function GET() {
 /** POST /api/chats — create or update a chat session */
 export async function POST(req: Request) {
   try {
-    await ensureDir();
     const chat = await req.json();
 
     if (!chat.id) {
       return NextResponse.json({ error: "Missing chat id" }, { status: 400 });
     }
 
-    const filePath = join(CHATS_DIR, `${chat.id}.json`);
-    await writeFile(filePath, JSON.stringify(chat, null, 2), "utf-8");
+    await prisma.chat.upsert({
+      where: { id: chat.id },
+      update: {
+        title: chat.title || "New Chat",
+        customTitle: chat.customTitle || false,
+        messages: chat.messages || [],
+        updatedAt: new Date(),
+      },
+      create: {
+        id: chat.id,
+        title: chat.title || "New Chat",
+        customTitle: chat.customTitle || false,
+        messages: chat.messages || [],
+      },
+    });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

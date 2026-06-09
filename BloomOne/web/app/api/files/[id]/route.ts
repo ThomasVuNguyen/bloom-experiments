@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFile, updateFile, deleteFile } from "@/lib/storage";
+import { prisma } from "@/lib/prisma";
 
 /**
  * GET /api/files/[id] — Get a single file's metadata
@@ -9,13 +9,22 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const record = await getFile(id);
 
-  if (!record) {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+  try {
+    const record = await prisma.uploadedFile.findUnique({ where: { id } });
+
+    if (!record) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(record);
+  } catch (error) {
+    console.error("Get file error:", error);
+    return NextResponse.json(
+      { error: "Failed to get file" },
+      { status: 500 },
+    );
   }
-
-  return NextResponse.json(record);
 }
 
 /**
@@ -31,31 +40,27 @@ export async function PATCH(
     const body = await req.json();
     const updates: Record<string, unknown> = {};
 
-    // Only allow specific fields to be updated
     if (body.status) updates.status = body.status;
     if (body.tags) updates.tags = body.tags;
     if (body.resultPath !== undefined) updates.resultPath = body.resultPath;
 
-    const patched = await updateFile(id, updates);
-
-    if (!patched) {
-      return NextResponse.json({ error: "File not found" }, { status: 404 });
-    }
+    const patched = await prisma.uploadedFile.update({
+      where: { id },
+      data: updates,
+    });
 
     return NextResponse.json(patched);
   } catch (error) {
+    console.error("Update file error:", error);
     return NextResponse.json(
-      {
-        error: "Failed to update file",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Failed to update file" },
       { status: 500 },
     );
   }
 }
 
 /**
- * DELETE /api/files/[id] — Delete file blob and metadata
+ * DELETE /api/files/[id] — Delete file metadata (blob stays on disk)
  */
 export async function DELETE(
   _req: NextRequest,
@@ -64,14 +69,14 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await deleteFile(id);
+    await prisma.uploadedFile.delete({ where: { id } }).catch(() => {
+      // Ignore if not found
+    });
     return NextResponse.json({ ok: true });
   } catch (error) {
+    console.error("Delete file error:", error);
     return NextResponse.json(
-      {
-        error: "Failed to delete file",
-        details: error instanceof Error ? error.message : "Unknown error",
-      },
+      { error: "Failed to delete file" },
       { status: 500 },
     );
   }

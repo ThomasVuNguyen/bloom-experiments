@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { LoginGate } from "@/components/login-gate";
 import { Sidebar } from "@/components/sidebar";
 import { Chat } from "@/components/chat";
+import { PatientDetailPanel } from "@/components/patient-detail";
 import { useChats } from "@/lib/use-chats";
 import type { ChatMessage } from "@/lib/api";
 
@@ -21,6 +22,9 @@ function ChatApp() {
   } = useChats();
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
+    null,
+  );
 
   // Per-chat LLM history (includes tool calls, not persisted to save space)
   const [llmHistoryMap, setLlmHistoryMap] = useState<
@@ -62,6 +66,7 @@ function ChatApp() {
   const handleSelectChat = useCallback(
     (id: string) => {
       selectChat(id);
+      setSelectedPatientId(null); // Close patient panel when switching chats
     },
     [selectChat],
   );
@@ -78,6 +83,10 @@ function ChatApp() {
     [deleteChat],
   );
 
+  const handleSelectPatient = useCallback((id: string) => {
+    setSelectedPatientId((prev) => (prev === id ? null : id)); // Toggle
+  }, []);
+
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar
@@ -89,6 +98,8 @@ function ChatApp() {
         onRenameChat={renameChat}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        onSelectPatient={handleSelectPatient}
+        selectedPatientId={selectedPatientId}
       />
 
       <Chat
@@ -99,6 +110,17 @@ function ChatApp() {
         onLlmHistoryChange={handleLlmHistoryChange}
         onSidebarToggle={() => setSidebarOpen(true)}
       />
+
+      {/* Patient detail panel */}
+      {selectedPatientId && (
+        <div className="hidden lg:block w-80 xl:w-96 flex-shrink-0">
+          <PatientDetailPanel
+            key={selectedPatientId}
+            patientId={selectedPatientId}
+            onClose={() => setSelectedPatientId(null)}
+          />
+        </div>
+      )}
     </div>
   );
 }

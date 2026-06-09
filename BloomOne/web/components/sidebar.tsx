@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatSession } from "@/lib/use-chats";
+import { PatientList } from "@/components/patient-list";
 
 interface SidebarProps {
   chats: ChatSession[];
@@ -12,6 +13,8 @@ interface SidebarProps {
   onRenameChat: (id: string, title: string) => void;
   isOpen: boolean;
   onClose: () => void;
+  onSelectPatient: (id: string) => void;
+  selectedPatientId: string | null;
 }
 
 function formatTime(ts: number): string {
@@ -180,7 +183,11 @@ export function Sidebar({
   onRenameChat,
   isOpen,
   onClose,
+  onSelectPatient,
+  selectedPatientId,
 }: SidebarProps) {
+  const [activeTab, setActiveTab] = useState<"chats" | "patients">("chats");
+
   return (
     <>
       {/* Mobile overlay */}
@@ -205,54 +212,92 @@ export function Sidebar({
               BloomOne
             </span>
           </div>
-          <button
-            onClick={onNewChat}
-            className="p-1.5 rounded-lg hover:bg-[var(--secondary)] transition-colors"
-            title="New chat"
-          >
-            <svg
-              className="w-4 h-4 text-[var(--foreground)]"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
+          {activeTab === "chats" && (
+            <button
+              onClick={onNewChat}
+              className="p-1.5 rounded-lg hover:bg-[var(--secondary)] transition-colors"
+              title="New chat"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M12 4.5v15m7.5-7.5h-15"
-              />
-            </svg>
+              <svg
+                className="w-4 h-4 text-[var(--foreground)]"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M12 4.5v15m7.5-7.5h-15"
+                />
+              </svg>
+            </button>
+          )}
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-[var(--border)]">
+          <button
+            onClick={() => setActiveTab("chats")}
+            className={`flex-1 px-3 py-2 text-xs font-medium transition-colors
+              ${activeTab === "chats"
+                ? "text-[var(--primary)] border-b-2 border-[var(--primary)]"
+                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"}`}
+          >
+            💬 Chats
+          </button>
+          <button
+            onClick={() => setActiveTab("patients")}
+            className={`flex-1 px-3 py-2 text-xs font-medium transition-colors
+              ${activeTab === "patients"
+                ? "text-[var(--primary)] border-b-2 border-[var(--primary)]"
+                : "text-[var(--muted-foreground)] hover:text-[var(--foreground)]"}`}
+          >
+            👥 Patients
           </button>
         </div>
 
-        {/* Chat list */}
+        {/* Content */}
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-0.5">
-          {chats.length === 0 && (
-            <p className="text-xs text-[var(--muted-foreground)] text-center py-8 px-4">
-              No chats yet. Start a new conversation!
-            </p>
-          )}
+          {activeTab === "chats" ? (
+            <>
+              {chats.length === 0 && (
+                <p className="text-xs text-[var(--muted-foreground)] text-center py-8 px-4">
+                  No chats yet. Start a new conversation!
+                </p>
+              )}
 
-          {chats.map((chat) => (
-            <ChatItem
-              key={chat.id}
-              chat={chat}
-              isActive={chat.id === activeChatId}
-              onSelect={() => {
-                onSelectChat(chat.id);
+              {chats.map((chat) => (
+                <ChatItem
+                  key={chat.id}
+                  chat={chat}
+                  isActive={chat.id === activeChatId}
+                  onSelect={() => {
+                    onSelectChat(chat.id);
+                    onClose();
+                  }}
+                  onDelete={() => onDeleteChat(chat.id)}
+                  onRename={(title) => onRenameChat(chat.id, title)}
+                />
+              ))}
+            </>
+          ) : (
+            <PatientList
+              onSelectPatient={(id) => {
+                onSelectPatient(id);
                 onClose();
               }}
-              onDelete={() => onDeleteChat(chat.id)}
-              onRename={(title) => onRenameChat(chat.id, title)}
+              selectedPatientId={selectedPatientId}
             />
-          ))}
+          )}
         </div>
 
         {/* Footer */}
         <div className="px-4 py-3 border-t border-[var(--border)]">
           <p className="text-[10px] text-[var(--muted-foreground)] leading-relaxed">
-            Chats are synced to your server.
+            {activeTab === "chats"
+              ? "Chats are synced to your server."
+              : "Patient records persist across sessions."}
           </p>
         </div>
       </aside>

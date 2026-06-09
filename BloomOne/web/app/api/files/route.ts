@@ -1,30 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
-import { listFiles, getStorageStats } from "@/lib/storage";
-import type { FileRecord } from "@/lib/storage";
+import { prisma } from "@/lib/prisma";
 
 /**
- * GET /api/files
- *
- * List all uploaded file records.
- * Optional query params:
- *   ?status=uploaded|processing|completed|error
- *   ?stats=true  (include storage stats in response)
+ * GET /api/files — List all uploaded files
+ * Optional: ?status=uploaded|processing|completed|error
  */
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const statusFilter = searchParams.get("status") as FileRecord["status"] | null;
-    const includeStats = searchParams.get("stats") === "true";
+    const statusFilter = searchParams.get("status");
 
-    const files = await listFiles(statusFilter || undefined);
+    const files = await prisma.uploadedFile.findMany({
+      where: statusFilter ? { status: statusFilter } : undefined,
+      orderBy: { createdAt: "desc" },
+    });
 
-    const response: Record<string, unknown> = { files };
-
-    if (includeStats) {
-      response.stats = await getStorageStats();
-    }
-
-    return NextResponse.json(response);
+    return NextResponse.json({ files });
   } catch (error) {
     console.error("List files error:", error);
     return NextResponse.json(

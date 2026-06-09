@@ -134,6 +134,18 @@ user explicitly says "run the full pipeline", "run all stages", or \
 be used when the user explicitly asks for the complete pipeline (stages 3→7) \
 in one go.
 
+## Patient Records
+
+You can create and manage patient records to track data across conversations.
+
+- When a user mentions a new patient, call `patient_create` with their name \
+and DOB if known. Use name + DOB as the deduplication key (standard lab practice).
+- When files are uploaded, call `patient_attach_file` to link them to the patient.
+- After running pipeline stages, call `patient_add_result` to save results.
+- Before starting work, call `patient_list` or `patient_get` to check for \
+existing records so you don't create duplicates.
+- Use `patient_update` to add notes, update details, or set HLA alleles.
+
 ## Quick Start
 
 - For uploaded files: inspect_artifact FIRST, then run pipeline with real barcode
@@ -436,6 +448,174 @@ TOOLS = [
             },
         },
     },
+    # ── Patient Management Tools ──────────────────────────────────────────
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_create",
+            "description": (
+                "Create a new patient record. Use when a user mentions a new "
+                "patient. The system auto-generates a unique ID. Use name + DOB "
+                "as the deduplication key (standard lab practice for duplicate names)."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Patient's name (e.g. 'Nani', 'John Doe')",
+                    },
+                    "dob": {
+                        "type": "string",
+                        "description": "Date of birth in YYYY-MM-DD format (optional, for dedup)",
+                    },
+                    "details": {
+                        "type": "object",
+                        "description": (
+                            "Free-form details: cancer_type, diagnosis, etc."
+                        ),
+                    },
+                    "hla_alleles": {
+                        "type": "string",
+                        "description": (
+                            "Comma-separated HLA alleles if known "
+                            "(e.g. 'HLA-A*02:01,HLA-B*07:02')"
+                        ),
+                    },
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_get",
+            "description": (
+                "Get a patient record by ID or name. Returns full details "
+                "including files, notes, and pipeline results."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "patient_id": {
+                        "type": "string",
+                        "description": "Patient ID (cuid) or name to search for",
+                    },
+                },
+                "required": ["patient_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_list",
+            "description": (
+                "List all patient records. Returns summary with name, ID, "
+                "file count, and pipeline run count for each patient."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_update",
+            "description": (
+                "Update a patient's details, HLA alleles, or add a note. "
+                "Use this to add observations, OCR'd text from documents, "
+                "or update clinical details."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "patient_id": {
+                        "type": "string",
+                        "description": "Patient ID",
+                    },
+                    "details": {
+                        "type": "object",
+                        "description": "Updated details (merged with existing)",
+                    },
+                    "hla_alleles": {
+                        "type": "string",
+                        "description": "Comma-separated HLA alleles to set",
+                    },
+                    "note": {
+                        "type": "string",
+                        "description": "A note to add to the patient's record",
+                    },
+                },
+                "required": ["patient_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_attach_file",
+            "description": (
+                "Attach an uploaded file to a patient record. The file_id "
+                "comes from the file upload response. Use this after a user "
+                "uploads files to link them to the correct patient."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "patient_id": {
+                        "type": "string",
+                        "description": "Patient ID to attach the file to",
+                    },
+                    "file_id": {
+                        "type": "string",
+                        "description": "File ID from the upload response",
+                    },
+                    "notes": {
+                        "type": "string",
+                        "description": "Notes about the file (e.g. 'MAF from biopsy 2024-01')",
+                    },
+                },
+                "required": ["patient_id", "file_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_add_result",
+            "description": (
+                "Save pipeline stage results to a patient's record. Call this "
+                "after running pipeline stages to link the output to the patient."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "patient_id": {
+                        "type": "string",
+                        "description": "Patient ID",
+                    },
+                    "stages_completed": {
+                        "type": "array",
+                        "items": {"type": "integer"},
+                        "description": "List of completed stage numbers (e.g. [3, 4, 5])",
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "Human-readable summary of the pipeline run",
+                    },
+                    "output_paths": {
+                        "type": "object",
+                        "description": "Map of stage name to output file path",
+                    },
+                },
+                "required": ["patient_id", "stages_completed", "summary"],
+            },
+        },
+    },
 ]
 
 
@@ -471,6 +651,12 @@ TOOL_LABELS = {
     "stage6_rank_candidates": "📊 Stage 6: Ranking candidates",
     "stage7_design_mrna": "💉 Stage 7: Designing mRNA constructs",
     "run_full_pipeline": "🚀 Running full pipeline (Stages 3→7)",
+    "patient_create": "👤 Creating patient record",
+    "patient_get": "📋 Fetching patient details",
+    "patient_list": "📋 Listing patients",
+    "patient_update": "✏️ Updating patient record",
+    "patient_attach_file": "📎 Attaching file to patient",
+    "patient_add_result": "📊 Saving pipeline results",
 }
 
 
@@ -557,6 +743,70 @@ def execute_tool(name: str, arguments: dict) -> dict:
 
         elif name == "run_full_pipeline":
             return _run_full_pipeline(arguments)
+
+        # ── Patient Management Tools ─────────────────────────────────
+        elif name == "patient_create":
+            from bloomone.patient import get_patient_manager
+            mgr = get_patient_manager()
+            alleles = None
+            if arguments.get("hla_alleles"):
+                alleles = [a.strip() for a in arguments["hla_alleles"].split(",") if a.strip()]
+            return mgr.create(
+                name=arguments["name"],
+                dob=arguments.get("dob"),
+                details=arguments.get("details"),
+                hla_alleles=alleles,
+            )
+
+        elif name == "patient_get":
+            from bloomone.patient import get_patient_manager
+            mgr = get_patient_manager()
+            pid = arguments["patient_id"]
+            # Try by ID first, then by name
+            result = mgr.get(pid)
+            if "error" in result:
+                by_name = mgr.get_by_name(pid)
+                if by_name:
+                    return by_name
+            return result
+
+        elif name == "patient_list":
+            from bloomone.patient import get_patient_manager
+            return get_patient_manager().list_all()
+
+        elif name == "patient_update":
+            from bloomone.patient import get_patient_manager
+            mgr = get_patient_manager()
+            pid = arguments["patient_id"]
+            # Handle note separately
+            if arguments.get("note"):
+                mgr.add_note(pid, arguments["note"], source="agent")
+            alleles = None
+            if arguments.get("hla_alleles"):
+                alleles = [a.strip() for a in arguments["hla_alleles"].split(",") if a.strip()]
+            return mgr.update(
+                patient_id=pid,
+                details=arguments.get("details"),
+                hla_alleles=alleles,
+            )
+
+        elif name == "patient_attach_file":
+            from bloomone.patient import get_patient_manager
+            return get_patient_manager().attach_file(
+                patient_id=arguments["patient_id"],
+                file_id=arguments["file_id"],
+                notes=arguments.get("notes", ""),
+            )
+
+        elif name == "patient_add_result":
+            from bloomone.patient import get_patient_manager
+            return get_patient_manager().add_result(
+                patient_id=arguments["patient_id"],
+                stages_completed=arguments["stages_completed"],
+                summary=arguments["summary"],
+                output_paths=arguments.get("output_paths", {}),
+                warnings=arguments.get("warnings"),
+            )
 
         else:
             return {"error": f"Unknown tool: {name}"}
