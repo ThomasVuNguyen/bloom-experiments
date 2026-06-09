@@ -436,31 +436,38 @@ export function Chat({
             ) : (
               statusUpdates.length === 0 && (
                 <div className="flex gap-3 animate-[fade-in_0.3s_ease-out]">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[var(--primary)] text-sm">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[var(--primary)] text-sm flex-shrink-0">
                     🧬
                   </div>
-                  <div className="glass rounded-2xl px-4 py-3">
-                    <div className="flex gap-1.5">
-                      <div
-                        className="w-2 h-2 rounded-full bg-[var(--muted-foreground)]"
-                        style={{
-                          animation: "pulse-glow 1.2s ease-in-out infinite",
-                        }}
-                      />
-                      <div
-                        className="w-2 h-2 rounded-full bg-[var(--muted-foreground)]"
-                        style={{
-                          animation:
-                            "pulse-glow 1.2s ease-in-out 0.2s infinite",
-                        }}
-                      />
-                      <div
-                        className="w-2 h-2 rounded-full bg-[var(--muted-foreground)]"
-                        style={{
-                          animation:
-                            "pulse-glow 1.2s ease-in-out 0.4s infinite",
-                        }}
-                      />
+                  <div className="glass rounded-2xl px-4 py-3 max-w-xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex gap-1">
+                        <div
+                          className="w-2 h-2 rounded-full bg-[var(--primary)]"
+                          style={{
+                            animation: "typing-bounce 1.4s ease-in-out infinite",
+                          }}
+                        />
+                        <div
+                          className="w-2 h-2 rounded-full bg-[var(--primary)]"
+                          style={{
+                            animation:
+                              "typing-bounce 1.4s ease-in-out 0.2s infinite",
+                          }}
+                        />
+                        <div
+                          className="w-2 h-2 rounded-full bg-[var(--primary)]"
+                          style={{
+                            animation:
+                              "typing-bounce 1.4s ease-in-out 0.4s infinite",
+                          }}
+                        />
+                      </div>
+                      <span className="text-xs text-[var(--muted-foreground)]" style={{
+                        animation: "pulse-glow 2s ease-in-out infinite",
+                      }}>
+                        Thinking...
+                      </span>
                     </div>
                   </div>
                 </div>
