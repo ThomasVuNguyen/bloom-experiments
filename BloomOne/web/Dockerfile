@@ -19,11 +19,13 @@ COPY . .
 # Build args become env vars at build time
 ARG BLOOMONE_API_URL
 ARG BLOOMONE_API_KEY
+ARG DATABASE_URL
 
 ENV BLOOMONE_API_URL=${BLOOMONE_API_URL}
 ENV BLOOMONE_API_KEY=${BLOOMONE_API_KEY}
+ENV DATABASE_URL=${DATABASE_URL}
 
-RUN npx prisma generate && npm run build
+RUN npx prisma generate && npx prisma db push --accept-data-loss && npm run build
 
 # ── Stage 3: Run ─────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
