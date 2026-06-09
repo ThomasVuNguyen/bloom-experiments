@@ -698,7 +698,19 @@ def _run_full_pipeline(arguments: dict) -> dict:
     }
 
 
-# ── Chat Loop ────────────────────────────────────────────────────────────────
+# Default model fallback chain — tried in order on rate-limit / 5xx errors
+FALLBACK_MODELS = [
+    "google/gemma-4-31b-it:free",
+    "openai/gpt-oss-120b:free",
+    "qwen/qwen3-coder:free",
+    "nvidia/nemotron-3-super-120b-a12b:free",
+]
+
+
+def _is_retryable(exc: Exception) -> bool:
+    """Check if an LLM error is retryable (rate limit or server error)."""
+    msg = str(exc).lower()
+    return any(code in msg for code in ["429", "rate limit", "502", "503"])
 
 
 def run_chat_turn(
@@ -713,6 +725,9 @@ def run_chat_turn(
     Sends messages to the LLM, handles tool calls, feeds results back,
     and repeats until the LLM produces a text response.
 
+    If the primary model hits a rate limit (429), automatically falls back
+    to the next model in the FALLBACK_MODELS chain.
+
     Modifies ``messages`` in place — after exhausting the generator,
     ``messages`` contains the full conversation including tool calls.
 
@@ -721,18 +736,59 @@ def run_chat_turn(
         {"type": "text",   "content": "Here are the results..."}
         {"type": "error",  "content": "Something went wrong"}
     """
+    # Build fallback chain: requested model first, then others
+    models_to_try = [model] + [
+        m for m in FALLBACK_MODELS if m != model
+    ]
+    active_model = model
+
     for _ in range(max_rounds):
-        # ── Call the LLM ─────────────────────────────────────────────
-        try:
-            response = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                tools=TOOLS,
-                tool_choice="auto",
-                temperature=0.3,
-            )
-        except Exception as e:
-            yield {"type": "error", "content": f"LLM request failed: {e}"}
+        # ── Call the LLM with fallback ───────────────────────────────
+        response = None
+        last_error = None
+
+        for candidate_model in models_to_try:
+            try:
+                response = client.chat.completions.create(
+                    model=candidate_model,
+                    messages=messages,
+                    tools=TOOLS,
+                    tool_choice="auto",
+                    temperature=0.3,
+                )
+                if candidate_model != active_model:
+                    yield {
+                        "type": "status",
+                        "content": (
+                            f"⚡ Switched to {candidate_model.split('/')[1].split(':')[0]}"
+                        ),
+                    }
+                    active_model = candidate_model
+                    # Update models_to_try so subsequent rounds use this model first
+                    models_to_try = [candidate_model] + [
+                        m for m in FALLBACK_MODELS if m != candidate_model
+                    ]
+                break  # Success — stop trying
+            except Exception as e:
+                last_error = e
+                if _is_retryable(e):
+                    yield {
+                        "type": "status",
+                        "content": (
+                            f"⏳ {candidate_model.split('/')[1].split(':')[0]} "
+                            f"rate-limited, trying next model..."
+                        ),
+                    }
+                    continue  # Try next model
+                else:
+                    yield {"type": "error", "content": f"LLM request failed: {e}"}
+                    return
+
+        if response is None:
+            yield {
+                "type": "error",
+                "content": f"All models exhausted. Last error: {last_error}",
+            }
             return
 
         choice = response.choices[0]

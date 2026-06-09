@@ -142,7 +142,7 @@ export function Sidebar({
         {/* Footer */}
         <div className="px-4 py-3 border-t border-[var(--border)]">
           <p className="text-[10px] text-[var(--muted-foreground)] leading-relaxed">
-            Chats are saved locally in your browser.
+            Chats are synced to your server.
           </p>
         </div>
       </aside>
