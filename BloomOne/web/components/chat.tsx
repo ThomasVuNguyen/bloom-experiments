@@ -48,7 +48,7 @@ export function Chat({
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusUpdates, setStatusUpdates] = useState<string[]>([]);
-  const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<{id: string; path: string; filename: string}[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
 
   // Model picker state
@@ -125,9 +125,12 @@ export function Chat({
 
       // Build user content with file context
       let content = text;
-      if (uploadedFilePath) {
-        content = `[User uploaded a MAF file to: ${uploadedFilePath}]\n\n${content}`;
-        setUploadedFilePath(null);
+      if (uploadedFiles.length > 0) {
+        const fileList = uploadedFiles
+          .map((f) => `- ${f.filename} (file_id: ${f.id}, path: ${f.path})`)
+          .join("\n");
+        content = `[User uploaded ${uploadedFiles.length} file(s):\n${fileList}]\n\n${content}`;
+        setUploadedFiles([]);
       }
 
       const userMessage: ChatMessage = { role: "user", content };
@@ -186,12 +189,12 @@ export function Chat({
       setStatusUpdates([]);
       setIsLoading(false);
     },
-    [input, isLoading, messages, llmHistory, uploadedFilePath, selectedModel, onMessagesChange, onLlmHistoryChange],
+    [input, isLoading, messages, llmHistory, uploadedFiles, selectedModel, onMessagesChange, onLlmHistoryChange],
   );
 
   const handleFileUploaded = useCallback(
-    (path: string, _filename: string) => {
-      setUploadedFilePath(path);
+    (fileInfo: { id: string; path: string; filename: string }) => {
+      setUploadedFiles((prev) => [...prev, fileInfo]);
     },
     [],
   );
@@ -509,7 +512,7 @@ export function Chat({
 
           <button
             type="submit"
-            disabled={isLoading || (!input.trim() && !uploadedFilePath)}
+            disabled={isLoading || (!input.trim() && uploadedFiles.length === 0)}
             className="flex-shrink-0 p-3 rounded-xl transition-all duration-200
                      bg-[var(--primary)] text-[var(--primary-foreground)]
                      hover:opacity-90 active:scale-95

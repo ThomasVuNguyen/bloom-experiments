@@ -4,7 +4,7 @@ import { useRef, useState, useCallback } from "react";
 import { uploadFile } from "@/lib/api";
 
 interface FileUploadProps {
-  onFileUploaded: (path: string, filename: string) => void;
+  onFileUploaded: (fileInfo: { id: string; path: string; filename: string }) => void;
   disabled?: boolean;
 }
 
@@ -25,7 +25,7 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
           setUploadProgress(`Uploading ${i + 1}/${files.length}: ${files[i].name}`);
           const result = await uploadFile(files[i]);
           uploaded.push(result.filename);
-          onFileUploaded(result.path, result.filename);
+          onFileUploaded({ id: result.id, path: result.path, filename: result.filename });
         }
         setUploadedFiles(uploaded);
       } catch (err) {
