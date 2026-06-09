@@ -5,23 +5,26 @@ import { stat } from "fs/promises";
 import { Readable } from "stream";
 
 /**
- * GET /api/files/[id]/download
+ * GET /api/patients/[id]/files/[fileId]/download
  *
- * Stream file bytes for download. Used by:
- * 1. The frontend — to let users download their files
- * 2. The Modal backend — to fetch files for pipeline processing
+ * Stream file bytes for a PatientFile record.
+ * Used by the Modal backend to fetch patient files for multimodal AI analysis.
  */
 export async function GET(
   _req: NextRequest,
-  { params }: { params: Promise<{ id: string }> },
+  { params }: { params: Promise<{ id: string; fileId: string }> },
 ) {
-  const { id } = await params;
+  const { id, fileId } = await params;
 
-  const record =
-    (await prisma.uploadedFile.findUnique({ where: { id } })) ??
-    (await prisma.patientFile.findUnique({ where: { id } }));
+  const record = await prisma.patientFile.findFirst({
+    where: { id: fileId, patientId: id },
+  });
+
   if (!record) {
-    return NextResponse.json({ error: "File not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Patient file not found" },
+      { status: 404 },
+    );
   }
 
   try {
