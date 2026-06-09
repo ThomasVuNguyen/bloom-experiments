@@ -18,8 +18,22 @@ const EXAMPLES = [
   "Explain the 7 pipeline stages",
 ];
 
-export function Chat() {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+interface ChatProps {
+  messages: ChatMessage[];
+  onMessagesChange: (messages: ChatMessage[]) => void;
+  /** Full LLM history including tool-call context */
+  llmHistory: ChatMessage[];
+  onLlmHistoryChange: (history: ChatMessage[]) => void;
+  onSidebarToggle: () => void;
+}
+
+export function Chat({
+  messages,
+  onMessagesChange,
+  llmHistory,
+  onLlmHistoryChange,
+  onSidebarToggle,
+}: ChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [statusUpdates, setStatusUpdates] = useState<string[]>([]);
@@ -28,9 +42,6 @@ export function Chat() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  // Full message history for LLM context (includes tool calls)
-  const [llmHistory, setLlmHistory] = useState<ChatMessage[]>([]);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -65,7 +76,7 @@ export function Chat() {
       const newMessages = [...messages, userMessage];
       const newHistory = [...llmHistory, userMessage];
 
-      setMessages(newMessages);
+      onMessagesChange(newMessages);
       setInput("");
       setIsLoading(true);
       setStatusUpdates([]);
@@ -73,13 +84,15 @@ export function Chat() {
 
       let finalText = "";
       let updatedHistory = newHistory;
+      const collectedStatus: string[] = [];
 
       try {
         for await (const event of streamChat(newHistory)) {
           switch (event.type) {
             case "status":
               if (event.content) {
-                setStatusUpdates((prev) => [...prev, event.content!]);
+                collectedStatus.push(event.content);
+                setStatusUpdates([...collectedStatus]);
               }
               break;
             case "text":
@@ -101,26 +114,21 @@ export function Chat() {
         finalText = `❌ Connection error: ${err instanceof Error ? err.message : "Unknown error"}`;
       }
 
-      // Build the final response content
-      let responseContent = "";
-      if (statusUpdates.length > 0 || finalText) {
-        responseContent = finalText;
-      }
-
-      if (responseContent) {
+      if (finalText) {
         const assistantMessage: ChatMessage = {
           role: "assistant",
-          content: responseContent,
+          content: finalText,
         };
-        setMessages((prev) => [...prev, assistantMessage]);
+        const finalMessages = [...newMessages, assistantMessage];
+        onMessagesChange(finalMessages);
       }
 
-      setLlmHistory(updatedHistory);
+      onLlmHistoryChange(updatedHistory);
       setStreamingContent("");
       setStatusUpdates([]);
       setIsLoading(false);
     },
-    [input, isLoading, messages, llmHistory, uploadedFilePath, statusUpdates],
+    [input, isLoading, messages, llmHistory, uploadedFilePath, onMessagesChange, onLlmHistoryChange],
   );
 
   const handleFileUploaded = useCallback(
@@ -141,11 +149,29 @@ export function Chat() {
   );
 
   return (
-    <div className="flex flex-col h-screen max-w-3xl mx-auto">
+    <div className="flex flex-col h-screen flex-1 min-w-0">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🧬</span>
+          {/* Mobile sidebar toggle */}
+          <button
+            onClick={onSidebarToggle}
+            className="p-1.5 rounded-lg hover:bg-[var(--secondary)] transition-colors lg:hidden"
+          >
+            <svg
+              className="w-5 h-5 text-[var(--foreground)]"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+              />
+            </svg>
+          </button>
           <div>
             <h1 className="text-base font-semibold text-[var(--foreground)]">
               BloomOne

@@ -458,6 +458,9 @@ def create_app(
     async def _chat_stream(request):
         """SSE streaming endpoint for the Next.js frontend."""
         import json as _json
+        import asyncio
+        import threading
+        import queue as _queue
 
         # Auth check
         if _api_key:
@@ -474,13 +477,46 @@ def create_app(
             {"role": "system", "content": SYSTEM_PROMPT}
         ] + list(messages)
 
-        def event_generator():
-            for update in run_chat_turn(
-                client, llm_messages, model=model_name
-            ):
+        async def event_generator():
+            q: _queue.Queue = _queue.Queue()
+            done_event = threading.Event()
+
+            def _run_pipeline():
+                try:
+                    for update in run_chat_turn(
+                        client, llm_messages, model=model_name
+                    ):
+                        q.put(update)
+                except Exception as exc:
+                    q.put({"type": "error", "content": str(exc)})
+                finally:
+                    done_event.set()
+
+            # Run the blocking pipeline in a background thread
+            thread = threading.Thread(
+                target=_run_pipeline, daemon=True
+            )
+            thread.start()
+
+            # Yield events as they arrive, with heartbeat pings
+            while not done_event.is_set() or not q.empty():
+                try:
+                    update = q.get(timeout=0.1)
+                    payload = _json.dumps(update, default=str)
+                    yield f"data: {payload}\n\n"
+                except _queue.Empty:
+                    if not done_event.is_set():
+                        # Send SSE comment as keepalive ping
+                        yield ": heartbeat\n\n"
+                        await asyncio.sleep(10)
+
+            # Drain any remaining items
+            while not q.empty():
+                update = q.get_nowait()
                 payload = _json.dumps(update, default=str)
                 yield f"data: {payload}\n\n"
-            # Send updated messages (minus system prompt) as final event
+
+            # Send final event with updated message history
             final = _json.dumps({
                 "type": "done",
                 "updated_messages": llm_messages[1:],
