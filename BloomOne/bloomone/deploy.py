@@ -74,6 +74,9 @@ chatbot_image = (
         "requests>=2.32.0",
         "pydantic>=2.10.0",
         "biopython>=1.84",
+        "google-cloud-iam>=2.15.0",  # For OIDC → WIF token exchange
+        "Pillow>=10.0.0",            # Image resize for multimodal
+        "pdfplumber>=0.11.0",        # PDF text extraction
     )
     .add_local_dir(BLOOMONE_SRC, remote_path="/root/bloomone")
 )
@@ -207,6 +210,7 @@ GEMMA_MODEL = "google/gemma-4-31b-it:free"
             modal.Secret.from_name("bloomone-api-key"),
             modal.Secret.from_name("cloudrift-api-key"),
             modal.Secret.from_name("coolify-frontend-url", required_keys=["COOLIFY_FRONTEND_URL"]),
+            modal.Secret.from_name("vertex-ai-wif-config"),  # GCP project metadata only, no credentials
         ],
     timeout=1800,
     scaledown_window=120,

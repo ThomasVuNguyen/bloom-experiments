@@ -1,16 +1,19 @@
 # BloomOne Security Model
 
-BloomOne uses a layered architecture where no single secret compromise gives full access. The Gemini API key never touches the browser or user-facing frontend.
+BloomOne uses a layered architecture where no single secret compromise gives full access. LLM API keys never touch the browser or user-facing frontend. Vertex AI access uses keyless OIDC authentication — no credential is ever created or stored.
 
 ## Architecture
 
 ```
-User (browser) → HF Space (Gradio, no secrets) → Modal backend (secrets here) → Gemini API
+User (browser) → Coolify frontend (no secrets) → Modal backend (secrets here) → LLM APIs
+                                                                                ├── OpenRouter (API key)
+                                                                                ├── CloudRift (API key)
+                                                                                └── Vertex AI (OIDC → WIF, no key)
 ```
 
-- **HF Space:** Public Gradio UI. Holds only a shared `BLOOMONE_API_KEY` for authenticating to Modal. Cannot call Gemini directly.
-- **Modal backend:** Private compute layer. Holds `GEMINI_API_KEY` and `BLOOMONE_API_KEY`. Validates incoming requests, proxies to Gemini.
-- **Gemini API:** Google-managed. Restricted API key with quota caps.
+- **Coolify frontend:** Next.js app. Holds only a shared `BLOOMONE_API_KEY` for authenticating to Modal. Cannot call any LLM directly.
+- **Modal backend:** Private compute layer. Holds API keys for OpenRouter/CloudRift. For Vertex AI, uses OIDC token exchange — no key stored.
+- **Vertex AI (Gemini 2.5 Pro):** Authenticated via Workload Identity Federation. Modal's OIDC JWT is exchanged at runtime for a 1-hour GCP access token. No service account key ever created.
 
 ---
 
@@ -18,34 +21,47 @@ User (browser) → HF Space (Gradio, no secrets) → Modal backend (secrets here
 
 | Secret | Location | Purpose | Blast radius if leaked |
 |--------|----------|---------|------------------------|
-| `GEMINI_API_KEY` | Modal secret | Authenticates to Gemini API | Attacker can generate text on your bill (capped by quota) |
-| `BLOOMONE_API_KEY` | Modal secret + HF Space secret | Authenticates HF→Modal link | Attacker can call Modal `/v1/chat` endpoint |
-| `HF_TOKEN` | Modal secret | Pulls gated models from HF Hub | Attacker can access private HF repos on your account |
+| `OPENROUTER_API_KEY` | Modal secret | Authenticates to OpenRouter LLM API | Attacker can generate text on your bill (free tier, capped by quota) |
+| `CLOUDRIFT_API_KEY` | Modal secret | Authenticates to CloudRift LLM API | Attacker can generate text on CloudRift (capped) |
+| `BLOOMONE_API_KEY` | Modal secret + Coolify | Authenticates frontend→Modal link | Attacker can call Modal `/v1/chat` endpoint |
+| `vertex-ai-wif-config` | Modal secret | GCP project ID, number, region, SA email | **No blast radius** — contains only public project metadata, not credentials |
 
 ---
 
-## API Key Restrictions (Gemini)
+## API Key Restrictions (OpenRouter / CloudRift)
 
-Applied in Google Cloud Console → API & Services → Credentials:
+- **Scope:** Keys are specific to each LLM provider (OpenRouter, CloudRift) — cannot access GCP resources
+- **Quota:** Rate-limited by provider (OpenRouter free tier, CloudRift caps)
+- **Budget alert:** Monitor via provider dashboards
 
-- **API restriction:** "Generative Language API" only — key cannot access Cloud Storage, Compute, BigQuery, etc.
-- **Quota:** 10 RPM, 100K tokens/min — caps runaway abuse
-- **Budget alert:** $10/day — triggers email notification
-- **Referrer restriction (optional):** Lock to Modal's egress IPs
+## Vertex AI — OIDC + Workload Identity Federation
 
----
+Gemini 2.5 Pro uses **keyless authentication** via Modal OIDC → GCP Workload Identity Federation.
 
-## Threat Model
+```
+Modal container → MODAL_IDENTITY_TOKEN (JWT) → GCP STS → 1-hour access token → Vertex AI
+```
 
-### If `GEMINI_API_KEY` leaks
+### What exists in GCP
 
-| Can do | Cannot do |
-|--------|-----------|
-| Call Gemini API on your bill | Access GCP project resources |
-| Generate text/images | Read Cloud Storage, BigQuery |
-| Consume quota (capped) | Access Modal, HF, or infrastructure |
+| Resource | What it is | If leaked |
+|----------|-----------|----------|
+| Service account `bloomone-llm@starmind-72daa` | Impersonation target (no key) | Not a credential — useless without valid OIDC token |
+| Workload Identity Pool `modal-pool` | Trust config for Modal OIDC | Public metadata — no secret value |
+| OIDC Provider `modal-provider` | Maps `oidc.modal.com` tokens | Public knowledge |
+| IAM binding: `roles/aiplatform.user` | SA can call Vertex AI | Cannot create/delete resources, access Storage/BigQuery/IAM |
 
-**Worst case:** ~$5–20/day before quota blocks them. Revoke in Cloud Console in 30 seconds.
+### Threat Analysis
+
+**To call Vertex AI, an attacker must:**
+1. Be running code on YOUR Modal workspace (to get a valid OIDC JWT)
+2. The JWT is signed by Modal and verified by GCP STS
+3. Even then, the token only grants `aiplatform.user` — text generation only
+
+**If the Modal account is compromised:** Attacker gets OIDC token access but tokens expire in 1 hour. Disable the WIF pool to instantly revoke all access:
+```bash
+gcloud iam workload-identity-pools update modal-pool --location=global --disabled --project=starmind-72daa
+```
 
 ### If `BLOOMONE_API_KEY` leaks
 
@@ -65,13 +81,15 @@ This is the worst case — attacker gets all secrets. **Mitigation:** 2FA on Mod
 
 ## Defense Layers
 
-1. **No secrets in browser** — HF Space frontend never sees the Gemini key
-2. **Endpoint authentication** — Modal validates `X-API-Key` header on every request
-3. **API restriction** — Gemini key locked to one API, cannot pivot
-4. **Quota caps** — Hard limits on requests/min and tokens/min
-5. **Budget alerts** — Dollar threshold notifications
-6. **Key rotation** — All secrets stored as env vars, rotatable without code changes
-7. **Minimal permissions** — Each secret has the narrowest possible scope
+1. **No secrets in browser** — Frontend never sees any LLM API key
+2. **Endpoint authentication** — Modal validates `Authorization: Bearer` header on every request
+3. **Keyless Vertex AI** — OIDC + WIF, no credential file ever created
+4. **Short-lived tokens** — Vertex AI access tokens expire in 1 hour, auto-refreshed
+5. **Minimal IAM** — SA has only `aiplatform.user`, cannot access other GCP resources
+6. **Shared project isolation** — WIF pool scoped to Modal identity only
+7. **Quota caps** — Hard limits on requests/min and tokens/min per provider
+8. **Budget alerts** — Dollar threshold notifications
+9. **Kill switch** — Disable WIF pool with one command to revoke all Vertex AI access
 
 ---
 
@@ -79,7 +97,8 @@ This is the worst case — attacker gets all secrets. **Mitigation:** 2FA on Mod
 
 | Scenario | Action |
 |----------|--------|
-| Gemini key leaked | Revoke in Cloud Console → Credentials → Delete key → Create new → Update Modal secret |
-| BloomOne key leaked | Generate new random key → Update Modal + HF Space secrets → Redeploy |
-| Suspicious usage spike | Check Cloud Console → APIs & Services → Dashboard for anomalous traffic |
-| Budget alert triggered | Review usage → Revoke key if unauthorized → Rotate |
+| OpenRouter/CloudRift key leaked | Revoke on provider dashboard → Create new → Update Modal secret |
+| BloomOne API key leaked | Generate new random key → Update Modal + Coolify secrets → Redeploy |
+| Suspicious Vertex AI usage | `gcloud iam workload-identity-pools update modal-pool --location=global --disabled --project=starmind-72daa` |
+| Modal account compromised | Disable WIF pool (above) + rotate all Modal secrets + enable 2FA |
+| Budget alert triggered | Review usage → Disable WIF pool if unauthorized → Check provider dashboards |
