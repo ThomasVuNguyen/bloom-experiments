@@ -22,11 +22,21 @@ export function LoginGate({ children }: LoginGateProps) {
     setLoading(true);
     setError("");
 
-    if (password === "bloom") {
-      document.cookie = "bloom_auth=1; path=/; max-age=604800; SameSite=Lax";
-      setAuthenticated(true);
-    } else {
-      setError("Incorrect password");
+    try {
+      const res = await fetch("/api/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      if (res.ok) {
+        document.cookie = "bloom_auth=1; path=/; max-age=604800; SameSite=Lax";
+        setAuthenticated(true);
+      } else {
+        setError("Incorrect password");
+      }
+    } catch {
+      setError("Connection error — try again");
     }
     setLoading(false);
   };

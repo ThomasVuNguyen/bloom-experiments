@@ -6,6 +6,7 @@ import type { ChatMessage } from "@/lib/api";
 export interface ChatSession {
   id: string;
   title: string;
+  customTitle?: boolean;
   messages: ChatMessage[];
   createdAt: number;
   updatedAt: number;
@@ -96,7 +97,7 @@ export function useChats() {
           const patched = {
             ...c,
             messages,
-            title: deriveTitle(messages),
+            title: c.customTitle ? c.title : deriveTitle(messages),
             updatedAt: Date.now(),
           };
           debouncedSave(patched);
@@ -120,6 +121,26 @@ export function useChats() {
     [activeChatId],
   );
 
+  const renameChat = useCallback(
+    (chatId: string, newTitle: string) => {
+      setChats((prev) => {
+        const updated = prev.map((c) => {
+          if (c.id !== chatId) return c;
+          const patched = {
+            ...c,
+            title: newTitle.trim() || c.title,
+            customTitle: true,
+            updatedAt: Date.now(),
+          };
+          debouncedSave(patched);
+          return patched;
+        });
+        return updated;
+      });
+    },
+    [debouncedSave],
+  );
+
   const selectChat = useCallback((chatId: string) => {
     setActiveChatId(chatId);
   }, []);
@@ -132,6 +153,7 @@ export function useChats() {
     createChat,
     updateChat,
     deleteChat,
+    renameChat,
     selectChat,
     setActiveChatId,
   };

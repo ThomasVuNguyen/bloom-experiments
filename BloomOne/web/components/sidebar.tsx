@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useRef, useEffect, useCallback } from "react";
 import type { ChatSession } from "@/lib/use-chats";
 
 interface SidebarProps {
@@ -8,6 +9,7 @@ interface SidebarProps {
   onSelectChat: (id: string) => void;
   onNewChat: () => void;
   onDeleteChat: (id: string) => void;
+  onRenameChat: (id: string, title: string) => void;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -28,12 +30,154 @@ function formatTime(ts: number): string {
   });
 }
 
+function ChatItem({
+  chat,
+  isActive,
+  onSelect,
+  onDelete,
+  onRename,
+}: {
+  chat: ChatSession;
+  isActive: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+  onRename: (title: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [editValue, setEditValue] = useState(chat.title);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [editing]);
+
+  const commitRename = useCallback(() => {
+    const trimmed = editValue.trim();
+    if (trimmed && trimmed !== chat.title) {
+      onRename(trimmed);
+    }
+    setEditing(false);
+  }, [editValue, chat.title, onRename]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        commitRename();
+      } else if (e.key === "Escape") {
+        setEditValue(chat.title);
+        setEditing(false);
+      }
+    },
+    [commitRename, chat.title],
+  );
+
+  if (editing) {
+    return (
+      <div
+        className={`w-full px-3 py-2.5 rounded-lg text-sm bg-[var(--secondary)]`}
+      >
+        <input
+          ref={inputRef}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onBlur={commitRename}
+          onKeyDown={handleKeyDown}
+          className="w-full bg-transparent text-[var(--foreground)] outline-none 
+                   border-b border-[var(--primary)] pb-0.5 text-sm"
+          maxLength={80}
+        />
+        <span className="text-[10px] text-[var(--muted-foreground)] mt-1 block">
+          Enter to save · Esc to cancel
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={onSelect}
+      onDoubleClick={(e) => {
+        e.preventDefault();
+        setEditValue(chat.title);
+        setEditing(true);
+      }}
+      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group
+        ${
+          isActive
+            ? "bg-[var(--secondary)] text-[var(--foreground)]"
+            : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50 hover:text-[var(--foreground)]"
+        }`}
+    >
+      <div className="flex items-start justify-between gap-1">
+        <span className="truncate leading-snug flex-1">{chat.title}</span>
+        <div className="flex-shrink-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-60">
+          {/* Rename button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setEditValue(chat.title);
+              setEditing(true);
+            }}
+            className="hover:!opacity-100 transition-opacity p-0.5 rounded hover:bg-[var(--primary)]/20"
+            title="Rename chat"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10"
+              />
+            </svg>
+          </button>
+          {/* Delete button */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            className="hover:!opacity-100 transition-opacity p-0.5 rounded hover:bg-[var(--destructive)]/20"
+            title="Delete chat"
+          >
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <span className="text-[10px] text-[var(--muted-foreground)] mt-0.5 block">
+        {formatTime(chat.updatedAt)}
+      </span>
+    </button>
+  );
+}
+
 export function Sidebar({
   chats,
   activeChatId,
   onSelectChat,
   onNewChat,
   onDeleteChat,
+  onRenameChat,
   isOpen,
   onClose,
 }: SidebarProps) {
@@ -91,51 +235,17 @@ export function Sidebar({
           )}
 
           {chats.map((chat) => (
-            <button
+            <ChatItem
               key={chat.id}
-              onClick={() => {
+              chat={chat}
+              isActive={chat.id === activeChatId}
+              onSelect={() => {
                 onSelectChat(chat.id);
                 onClose();
               }}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group
-                ${
-                  chat.id === activeChatId
-                    ? "bg-[var(--secondary)] text-[var(--foreground)]"
-                    : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50 hover:text-[var(--foreground)]"
-                }`}
-            >
-              <div className="flex items-start justify-between gap-2">
-                <span className="truncate leading-snug flex-1">
-                  {chat.title}
-                </span>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteChat(chat.id);
-                  }}
-                  className="flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 
-                           transition-opacity p-0.5 rounded hover:bg-[var(--destructive)]/20"
-                  title="Delete chat"
-                >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={2}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M6 18L18 6M6 6l12 12"
-                    />
-                  </svg>
-                </button>
-              </div>
-              <span className="text-[10px] text-[var(--muted-foreground)] mt-0.5 block">
-                {formatTime(chat.updatedAt)}
-              </span>
-            </button>
+              onDelete={() => onDeleteChat(chat.id)}
+              onRename={(title) => onRenameChat(chat.id, title)}
+            />
           ))}
         </div>
 

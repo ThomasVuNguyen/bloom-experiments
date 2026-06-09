@@ -15,6 +15,7 @@ function ChatApp() {
     createChat,
     updateChat,
     deleteChat,
+    renameChat,
     selectChat,
     setActiveChatId,
   } = useChats();
@@ -85,6 +86,7 @@ function ChatApp() {
         onSelectChat={handleSelectChat}
         onNewChat={handleNewChat}
         onDeleteChat={handleDeleteChat}
+        onRenameChat={renameChat}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
