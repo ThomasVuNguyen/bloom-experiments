@@ -37,6 +37,27 @@ export async function fetchModels(): Promise<ModelsResponse> {
 }
 
 /**
+ * Generate a short chat title using Gemini 2.5 Flash Lite.
+ * Returns "New Chat" on any failure — fire-and-forget safe.
+ */
+export async function generateTitle(
+  messages: ChatMessage[],
+): Promise<string> {
+  try {
+    const response = await fetch("/api/chat/title", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages }),
+    });
+    if (!response.ok) return "New Chat";
+    const data = await response.json();
+    return data.title || "New Chat";
+  } catch {
+    return "New Chat";
+  }
+}
+
+/**
  * Send a chat message via SSE streaming.
  * Yields StreamEvents as they arrive from the backend.
  */
