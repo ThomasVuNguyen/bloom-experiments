@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { ChatMessage } from "@/lib/api";
 
 export interface ChatSession {
@@ -11,31 +11,8 @@ export interface ChatSession {
   updatedAt: number;
 }
 
-const STORAGE_KEY = "bloomone_chats";
-
 function generateId(): string {
   return `chat_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function loadChats(): ChatSession[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveChats(chats: ChatSession[]) {
-  if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(chats));
-  } catch {
-    // Storage full — remove oldest chats
-    const trimmed = chats.slice(-20);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
-  }
 }
 
 /** Derive a title from the first user message */
@@ -46,14 +23,53 @@ function deriveTitle(messages: ChatMessage[]): string {
   return text.length > 60 ? text.slice(0, 57) + "..." : text;
 }
 
+/** Debounced save to server */
+function useDebouncedSave(delay = 500) {
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const save = useCallback(
+    (chat: ChatSession) => {
+      if (timer.current) clearTimeout(timer.current);
+      timer.current = setTimeout(async () => {
+        try {
+          await fetch("/api/chats", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(chat),
+          });
+        } catch {
+          // Silent fail — chats still work in memory
+        }
+      }, delay);
+    },
+    [delay],
+  );
+
+  return save;
+}
+
 export function useChats() {
   const [chats, setChats] = useState<ChatSession[]>([]);
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const debouncedSave = useDebouncedSave();
 
-  // Load from localStorage on mount
+  // Load from server on mount
   useEffect(() => {
-    const loaded = loadChats();
-    setChats(loaded);
+    async function load() {
+      try {
+        const res = await fetch("/api/chats");
+        if (res.ok) {
+          const data = await res.json();
+          setChats(data);
+        }
+      } catch {
+        // API not available — start fresh
+      } finally {
+        setLoaded(true);
+      }
+    }
+    load();
   }, []);
 
   const activeChat = chats.find((c) => c.id === activeChatId) || null;
@@ -66,45 +82,40 @@ export function useChats() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    setChats((prev) => {
-      const updated = [newChat, ...prev];
-      saveChats(updated);
-      return updated;
-    });
+    setChats((prev) => [newChat, ...prev]);
     setActiveChatId(newChat.id);
+    debouncedSave(newChat);
     return newChat.id;
-  }, []);
+  }, [debouncedSave]);
 
   const updateChat = useCallback(
     (chatId: string, messages: ChatMessage[]) => {
       setChats((prev) => {
-        const updated = prev.map((c) =>
-          c.id === chatId
-            ? {
-                ...c,
-                messages,
-                title: deriveTitle(messages),
-                updatedAt: Date.now(),
-              }
-            : c,
-        );
-        saveChats(updated);
+        const updated = prev.map((c) => {
+          if (c.id !== chatId) return c;
+          const patched = {
+            ...c,
+            messages,
+            title: deriveTitle(messages),
+            updatedAt: Date.now(),
+          };
+          debouncedSave(patched);
+          return patched;
+        });
         return updated;
       });
     },
-    [],
+    [debouncedSave],
   );
 
   const deleteChat = useCallback(
     (chatId: string) => {
-      setChats((prev) => {
-        const updated = prev.filter((c) => c.id !== chatId);
-        saveChats(updated);
-        return updated;
-      });
+      setChats((prev) => prev.filter((c) => c.id !== chatId));
       if (activeChatId === chatId) {
         setActiveChatId(null);
       }
+      // Delete from server
+      fetch(`/api/chats/${chatId}`, { method: "DELETE" }).catch(() => {});
     },
     [activeChatId],
   );
@@ -117,6 +128,7 @@ export function useChats() {
     chats,
     activeChat,
     activeChatId,
+    loaded,
     createChat,
     updateChat,
     deleteChat,

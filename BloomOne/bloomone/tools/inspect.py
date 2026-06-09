@@ -106,6 +106,12 @@ def register_inspect_tools(mcp):
                         .to_dict()
                     )
 
+                if "Tumor_Sample_Barcode" in df.columns:
+                    barcodes = df["Tumor_Sample_Barcode"].unique().tolist()
+                    result["patient_barcodes"] = barcodes[:10]
+                    result["total_patients"] = len(barcodes)
+                    result["recommended_patient_id"] = str(barcodes[0])
+
                 # Peptide file summaries
                 if "peptide" in df.columns:
                     result["unique_peptides"] = df["peptide"].nunique()

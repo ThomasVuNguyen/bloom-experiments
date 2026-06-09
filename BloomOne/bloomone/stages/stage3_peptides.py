@@ -170,11 +170,15 @@ def generate_peptides(
     maf = pd.read_csv(maf_path, sep="\t", comment="#", low_memory=False)
 
     # Select patient
-    if patient_id is None:
-        patient_id = str(maf["Tumor_Sample_Barcode"].unique()[0])
+    available_barcodes = maf["Tumor_Sample_Barcode"].unique()
+    if patient_id is None or patient_id not in available_barcodes:
+        if patient_id is not None:
+            print(
+                f"  ⚠️ Patient ID '{patient_id}' not found in MAF. "
+                f"Available barcodes: {list(available_barcodes[:5])}..."
+            )
+        patient_id = str(available_barcodes[0])
         print(f"Auto-selected patient: {patient_id}")
-    else:
-        maf = maf[maf["Tumor_Sample_Barcode"] == patient_id].copy()
 
     patient_maf = maf[maf["Tumor_Sample_Barcode"] == patient_id].copy()
     print(f"Total mutations for {patient_id}: {len(patient_maf)}")

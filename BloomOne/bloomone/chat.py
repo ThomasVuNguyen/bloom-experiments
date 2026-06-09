@@ -41,26 +41,42 @@ is available (cBioPortal, TCGA MAF, or user-uploaded MAF).
 
 ## Critical Rules
 
-1. **HLA alleles are REQUIRED** for Stage 4. If the user hasn't provided \
+1. **When a user uploads a file**, ALWAYS call `inspect_artifact` FIRST \
+to analyze the file before running any pipeline stage. This reveals:
+   - Patient barcodes (Tumor_Sample_Barcode) — use these as `patient_id`
+   - Mutation types and counts
+   - Gene list and column structure
+   Never guess the patient_id — inspect the file to find the real barcode.
+
+2. **HLA alleles are REQUIRED** for Stage 4. If the user hasn't provided \
 them, you MUST ask before proceeding. \
 Format: HLA-A*02:01,HLA-B*07:02,HLA-C*07:01. \
 cBioPortal does NOT provide HLA alleles — always ask.
 
-2. **Data flow**: Each stage produces a file path used by the next stage. \
+3. **Data flow**: Each stage produces a file path used by the next stage. \
 Read the `next_action` field in each tool response for exactly what to do next.
 
-3. **Research use only**: Always remind users that ALL outputs are for \
+4. **Research use only**: Always remind users that ALL outputs are for \
 RESEARCH USE ONLY and not validated for clinical use.
 
-4. After the pipeline completes, present a clear summary:
+5. After the pipeline completes, present a clear summary:
    - Pipeline funnel: mutations → peptides → binders → safe → ranked → mRNA
    - Top candidates (gene, mutation, peptide, IC50)
    - Any warnings
 
+6. **Respect the user's requested scope.** If the user asks to run a \
+specific stage (e.g., "run stage 1", "just generate peptides", "only do \
+binding prediction"), run ONLY that stage's tool and then STOP and report \
+the results. Do NOT automatically chain into subsequent stages unless the \
+user explicitly says "run the full pipeline", "run all stages", or \
+"continue through all stages". The `run_full_pipeline` tool should ONLY \
+be used when the user explicitly asks for the complete pipeline (stages 3→7) \
+in one go.
+
 ## Quick Start
 
+- For uploaded files: inspect_artifact FIRST, then run pipeline with real barcode
 - For TCGA/cBioPortal: ask for case/sample ID + HLA alleles
-- For local files: ask for MAF path + HLA alleles
 - Demo: case TCGA-BF-A3DL-01, study skcm_tcga_pan_can_atlas_2018
 
 Be concise and scientific. Show progress as you run each stage.
@@ -69,6 +85,36 @@ Be concise and scientific. Show progress as you run each stage.
 # ── Tool Definitions (OpenAI function-calling format) ────────────────────────
 
 TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "inspect_artifact",
+            "description": (
+                "Inspect and analyze a pipeline file (MAF, TSV, CSV, FASTA). "
+                "ALWAYS call this FIRST when a user uploads a file. Returns "
+                "row count, columns, patient barcodes (Tumor_Sample_Barcode), "
+                "mutation type breakdown, gene list, and sample rows. Use the "
+                "patient barcodes from the result as patient_id when calling "
+                "pipeline tools — never guess the patient_id."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Absolute path to the file to inspect",
+                    },
+                    "max_rows": {
+                        "type": "integer",
+                        "description": (
+                            "Max sample rows to return (default 5)"
+                        ),
+                    },
+                },
+                "required": ["file_path"],
+            },
+        },
+    },
     {
         "type": "function",
         "function": {
@@ -355,6 +401,7 @@ def summarize_result(result: dict, max_items: int = 5) -> dict:
 
 # Status labels for UI
 TOOL_LABELS = {
+    "inspect_artifact": "🔍 Analyzing uploaded file",
     "stage1_fetch_cbio": "📥 Stage 1: Fetching from cBioPortal",
     "stage1_fetch_tcga": "📥 Stage 1: Fetching from TCGA/GDC",
     "stage3_generate_peptides": "🧬 Stage 3: Generating peptides",
@@ -369,7 +416,10 @@ TOOL_LABELS = {
 def execute_tool(name: str, arguments: dict) -> dict:
     """Execute a BloomOne pipeline tool by name and return the result."""
     try:
-        if name == "stage1_fetch_cbio":
+        if name == "inspect_artifact":
+            return _inspect_artifact(arguments)
+
+        elif name == "stage1_fetch_cbio":
             from bloomone.stages.stage1_ingest import fetch_cbio_data
 
             result = fetch_cbio_data(
@@ -458,6 +508,99 @@ def execute_tool(name: str, arguments: dict) -> dict:
         }
 
 
+def _inspect_artifact(arguments: dict) -> dict:
+    """Inspect a MAF/TSV/FASTA file and return a summary for the LLM."""
+    import os
+
+    import pandas as pd
+
+    file_path = arguments["file_path"]
+    max_rows = arguments.get("max_rows", 5)
+
+    if not os.path.exists(file_path):
+        return {
+            "error": f"File not found: {file_path}",
+            "suggestion": "Check the file path — was it uploaded correctly?",
+        }
+
+    stat = os.stat(file_path)
+    result: dict = {
+        "file_path": file_path,
+        "size_bytes": stat.st_size,
+    }
+
+    try:
+        # Determine separator
+        if file_path.endswith(".csv"):
+            sep = ","
+        else:
+            sep = "\t"
+
+        df = pd.read_csv(file_path, sep=sep, comment="#", low_memory=False)
+
+        result["total_rows"] = len(df)
+        result["columns"] = list(df.columns)
+
+        # Patient barcodes — critical for pipeline
+        if "Tumor_Sample_Barcode" in df.columns:
+            barcodes = df["Tumor_Sample_Barcode"].unique().tolist()
+            result["patient_barcodes"] = barcodes[:10]
+            result["total_patients"] = len(barcodes)
+            result["recommended_patient_id"] = str(barcodes[0])
+
+        # Mutation breakdown
+        if "Variant_Classification" in df.columns:
+            result["variant_types"] = (
+                df["Variant_Classification"].value_counts().to_dict()
+            )
+            missense_count = int(
+                (df["Variant_Classification"] == "Missense_Mutation").sum()
+            )
+            result["missense_mutations"] = missense_count
+
+        # Gene list
+        if "Hugo_Symbol" in df.columns:
+            genes = sorted(df["Hugo_Symbol"].dropna().unique().tolist())
+            result["unique_genes"] = len(genes)
+            result["top_genes"] = genes[:20]
+
+        # HGVSp_Short availability
+        if "HGVSp_Short" in df.columns:
+            has_hgvsp = int(df["HGVSp_Short"].notna().sum())
+            result["rows_with_protein_change"] = has_hgvsp
+
+        # Sample rows (trimmed to avoid token overflow)
+        keep_cols = [
+            c for c in [
+                "Hugo_Symbol", "Variant_Classification", "HGVSp_Short",
+                "Tumor_Sample_Barcode", "Chromosome", "Start_Position",
+            ] if c in df.columns
+        ]
+        if keep_cols:
+            result["sample_rows"] = (
+                df[keep_cols].head(max_rows).to_dict("records")
+            )
+        else:
+            result["sample_rows"] = (
+                df.head(max_rows).to_dict("records")
+            )
+
+        # Build summary
+        parts = [f"MAF/TSV file with {len(df)} rows and {len(df.columns)} columns."]
+        if "total_patients" in result:
+            parts.append(f"{result['total_patients']} patient(s): {result.get('patient_barcodes', [])[:3]}.")
+        if "missense_mutations" in result:
+            parts.append(f"{result['missense_mutations']} missense mutations.")
+        if "unique_genes" in result:
+            parts.append(f"{result['unique_genes']} unique genes.")
+        result["summary"] = " ".join(parts)
+
+    except Exception as e:
+        result["error"] = f"Failed to parse file: {e}"
+
+    return result
+
+
 def _run_full_pipeline(arguments: dict) -> dict:
     """Run stages 3→7 sequentially and return a combined result."""
     from bloomone.stages.stage3_peptides import generate_peptides
@@ -479,6 +622,20 @@ def _run_full_pipeline(arguments: dict) -> dict:
     pep = generate_peptides(
         maf_path=maf_path, patient_id=patient_id, tpm_path=tpm_path
     )
+
+    if pep.total_candidates == 0:
+        return {
+            "patient_id": patient_id,
+            "summary": (
+                "Pipeline stopped at Stage 3: no missense-derived peptides generated. "
+                "This may mean the MAF file has no missense mutations for the selected "
+                "patient, or protein sequences could not be fetched."
+            ),
+            "stages_completed": [3],
+            "warnings": pep.warnings,
+            "research_use_only": True,
+        }
+
     bind = predict_binding(
         peptides_path=pep.candidates_path,
         hla_alleles=alleles,

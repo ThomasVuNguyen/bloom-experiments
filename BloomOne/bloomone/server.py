@@ -532,6 +532,20 @@ async def run_full_pipeline(
         stages_completed.append(3)
         all_warnings.extend(peptide_result.warnings)
 
+        if peptide_result.total_candidates == 0:
+            _sync_after()
+            return {
+                "patient_id": patient_id,
+                "summary": (
+                    "Pipeline stopped at Stage 3: no missense-derived peptides generated. "
+                    "This may mean the MAF has no missense mutations for the selected "
+                    "patient, or protein sequences could not be fetched."
+                ),
+                "stages_completed": stages_completed,
+                "warnings": all_warnings,
+                "research_use_only": True,
+            }
+
         # Commit so GPU container can see the peptides file
         _sync_after()
 
