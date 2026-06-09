@@ -6,11 +6,24 @@
 export interface ChatMessage {
   role: "user" | "assistant" | "system";
   content: string;
+  metadata?: ResponseMetadata;
+}
+
+export interface ResponseMetadata {
+  model: string;
+  provider: string;
+  prompt_tokens: number;
+  completion_tokens: number;
+  total_tokens: number;
+  tool_calls: number;
+  rounds: number;
+  latency_s: number;
 }
 
 export interface StreamEvent {
   type: "status" | "text" | "error" | "done";
   content?: string;
+  metadata?: ResponseMetadata;
   updated_messages?: ChatMessage[];
 }
 

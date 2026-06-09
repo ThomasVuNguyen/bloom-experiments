@@ -15,6 +15,7 @@ import {
   fetchModels,
   type ChatMessage,
   type ModelInfo,
+  type ResponseMetadata,
 } from "@/lib/api";
 
 const EXAMPLES = [
@@ -50,6 +51,7 @@ export function Chat({
   const [statusUpdates, setStatusUpdates] = useState<string[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<{id: string; path: string; filename: string}[]>([]);
   const [streamingContent, setStreamingContent] = useState("");
+  const [streamingMetadata, setStreamingMetadata] = useState<ResponseMetadata | null>(null);
 
   // Model picker state
   const [models, setModels] = useState<ModelInfo[]>([]);
@@ -142,6 +144,7 @@ export function Chat({
       setIsLoading(true);
       setStatusUpdates([]);
       setStreamingContent("");
+      setStreamingMetadata(null);
 
       let finalText = "";
       let updatedHistory = newHistory;
@@ -159,6 +162,9 @@ export function Chat({
             case "text":
               finalText = event.content || "";
               setStreamingContent(finalText);
+              if (event.metadata) {
+                setStreamingMetadata(event.metadata);
+              }
               break;
             case "error":
               finalText = `❌ ${event.content || "Unknown error"}`;
@@ -179,6 +185,7 @@ export function Chat({
         const assistantMessage: ChatMessage = {
           role: "assistant",
           content: finalText,
+          metadata: streamingMetadata ?? undefined,
         };
         const finalMessages = [...newMessages, assistantMessage];
         onMessagesChange(finalMessages);
@@ -186,10 +193,11 @@ export function Chat({
 
       onLlmHistoryChange(updatedHistory);
       setStreamingContent("");
+      setStreamingMetadata(null);
       setStatusUpdates([]);
       setIsLoading(false);
     },
-    [input, isLoading, messages, llmHistory, uploadedFiles, selectedModel, onMessagesChange, onLlmHistoryChange],
+    [input, isLoading, messages, llmHistory, uploadedFiles, selectedModel, streamingMetadata, onMessagesChange, onLlmHistoryChange],
   );
 
   const handleFileUploaded = useCallback(
@@ -433,7 +441,7 @@ export function Chat({
             )}
             {streamingContent ? (
               <Message
-                message={{ role: "assistant", content: streamingContent }}
+                message={{ role: "assistant", content: streamingContent, metadata: streamingMetadata ?? undefined }}
                 isStreaming={true}
               />
             ) : (

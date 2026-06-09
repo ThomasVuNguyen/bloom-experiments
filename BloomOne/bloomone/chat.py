@@ -1,17 +1,22 @@
 """
-BloomOne AI Chat — Gemini 2.5 Flash tool-calling orchestrator.
+BloomOne — Chat engine with tool calling.
 
-Provides tool definitions (OpenAI function-calling format), a tool
-executor that calls BloomOne stage functions directly, and a chat loop
-that handles multi-round tool calling until the LLM produces a final
-text response.
+This module provides:
+- Tool definitions (TOOLS) for OpenAI-compatible function calling
+- Tool executor (execute_tool) to dispatch tool calls to pipeline stages
+- Chat turn runner (run_chat_turn) with model fallback + streaming
+- Multimodal support: patient_read_files injects images into Gemini context
+
+The chat UI (chat_ui.py) imports and uses these components.
 """
 
 from __future__ import annotations
 
+import base64
+import io
 import json
 import os
-import traceback
+from pathlib import Path
 from typing import Generator
 
 from bloomone.config import BLOOMONE_VERSION
@@ -145,6 +150,25 @@ and DOB if known. Use name + DOB as the deduplication key (standard lab practice
 - Before starting work, call `patient_list` or `patient_get` to check for \
 existing records so you don't create duplicates.
 - Use `patient_update` to add notes, update details, or set HLA alleles.
+
+## Reading Patient Files
+
+When a user asks you to "review files", "look at the images", "read the \
+documents", "what's in the files", or says "yes" to your offer to review \
+files, you MUST call `patient_read_files`. This tool downloads the actual \
+file content (images, PDFs, text files) so you can see and analyze them.
+
+**After calling patient_read_files, you MUST describe in detail what you \
+see in EACH file:**
+- For images: describe what the image shows (charts, screenshots, medical \
+  reports, test results, etc.) — include specific text, numbers, and data \
+  you can read from the image.
+- For PDFs/text: summarize the key content, data points, and findings.
+- For genomic files: note the format, key columns, and sample data.
+
+**Do NOT just report metadata** (filename, file type, size). The user wants \
+to know WHAT IS IN the files. Think of yourself as reading the files on \
+behalf of the user and reporting back everything you see.
 
 ## Quick Start
 
@@ -616,6 +640,46 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "patient_read_files",
+            "description": (
+                "Read and analyze a patient's attached files (images, PDFs, "
+                "documents). Downloads file content so you can see and describe "
+                "images, read PDF text, and review documents. "
+                "IMPORTANT: Only works with Gemini for image analysis. "
+                "Call this when the user asks you to look at, review, or "
+                "analyze a patient's files, scans, or documents."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "patient_id": {
+                        "type": "string",
+                        "description": "Patient ID to read files from",
+                    },
+                    "file_types": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Filter by file type: 'image', 'pdf', 'genomic', "
+                            "'document', 'dicom'. Omit to read all types."
+                        ),
+                    },
+                    "file_ids": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": (
+                            "Specific file IDs to read (from patient_get response). "
+                            "Omit to read all files."
+                        ),
+                    },
+                },
+                "required": ["patient_id"],
+            },
+        },
+    },
 ]
 
 
@@ -657,6 +721,7 @@ TOOL_LABELS = {
     "patient_update": "✏️ Updating patient record",
     "patient_attach_file": "📎 Attaching file to patient",
     "patient_add_result": "📊 Saving pipeline results",
+    "patient_read_files": "👁️ Reading patient files",
 }
 
 
@@ -808,10 +873,14 @@ def execute_tool(name: str, arguments: dict) -> dict:
                 warnings=arguments.get("warnings"),
             )
 
+        elif name == "patient_read_files":
+            return _read_patient_files(arguments)
+
         else:
             return {"error": f"Unknown tool: {name}"}
 
     except Exception as e:
+        import traceback
         return {
             "error": f"Tool '{name}' failed: {str(e)}",
             "traceback": traceback.format_exc(),
@@ -919,6 +988,270 @@ def _inspect_artifact(arguments: dict) -> dict:
         result["error"] = f"Failed to parse file: {e}"
 
     return result
+
+
+# ── Max limits for patient_read_files ────────────────────────────────────────
+_MAX_FILES_PER_READ = 5
+_MAX_TOTAL_BYTES = 20 * 1024 * 1024  # 20 MB
+_IMAGE_MAX_DIMENSION = 1024  # resize images to this max width/height
+
+
+def _resize_image_to_base64(raw_bytes: bytes, mime_type: str) -> str:
+    """Resize an image to max dimension and return base64 data URI."""
+    from PIL import Image
+
+    img = Image.open(io.BytesIO(raw_bytes))
+
+    # Resize if larger than max dimension
+    w, h = img.size
+    if max(w, h) > _IMAGE_MAX_DIMENSION:
+        scale = _IMAGE_MAX_DIMENSION / max(w, h)
+        img = img.resize((int(w * scale), int(h * scale)), Image.LANCZOS)
+
+    # Convert to RGB if needed (e.g., RGBA PNGs)
+    if img.mode in ("RGBA", "P"):
+        img = img.convert("RGB")
+        mime_type = "image/jpeg"
+
+    buf = io.BytesIO()
+    fmt = "JPEG" if "jpeg" in mime_type or "jpg" in mime_type else "PNG"
+    img.save(buf, format=fmt, quality=85)
+    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
+
+    return f"data:{mime_type};base64,{b64}"
+
+
+def _extract_pdf_text(raw_bytes: bytes, max_pages: int = 10) -> str:
+    """Extract text from a PDF. Returns first N pages of text."""
+    try:
+        import pdfplumber
+
+        pages_text = []
+        with pdfplumber.open(io.BytesIO(raw_bytes)) as pdf:
+            for i, page in enumerate(pdf.pages[:max_pages]):
+                text = page.extract_text() or ""
+                if text.strip():
+                    pages_text.append(f"--- Page {i + 1} ---\n{text}")
+
+        if not pages_text:
+            return "(PDF contained no extractable text — may be scanned/image-based)"
+
+        result = "\n\n".join(pages_text)
+        if len(pdf.pages) > max_pages:
+            result += f"\n\n... ({len(pdf.pages) - max_pages} more pages not shown)"
+        return result
+    except Exception as e:
+        return f"(Failed to extract PDF text: {e})"
+
+
+def _read_patient_files(arguments: dict) -> dict:
+    """
+    Read and process patient files for AI analysis.
+
+    Returns a dict with:
+    - files: metadata for each file processed
+    - _multimodal_parts: list of OpenAI content parts (images as data URIs)
+      → used by run_chat_turn to inject into Gemini messages
+    - text_summary: plain text summary for non-vision models
+    """
+    import requests
+
+    patient_id = arguments["patient_id"]
+    type_filter = arguments.get("file_types")
+    id_filter = arguments.get("file_ids")
+
+    if not COOLIFY_FRONTEND_URL:
+        return {"error": "COOLIFY_FRONTEND_URL not configured"}
+
+    # 1. Fetch patient file list from Coolify
+    try:
+        list_url = f"{COOLIFY_FRONTEND_URL}/api/patients/{patient_id}/files"
+        resp = requests.get(list_url, timeout=15)
+        if not resp.ok:
+            return {"error": f"Failed to list patient files: {resp.status_code}"}
+        files_data = resp.json().get("files", [])
+    except Exception as e:
+        return {"error": f"Failed to fetch patient files: {e}"}
+
+    if not files_data:
+        return {
+            "files": [],
+            "summary": f"Patient {patient_id} has no attached files.",
+        }
+
+    # 2. Apply filters
+    if type_filter:
+        files_data = [f for f in files_data if f.get("fileType") in type_filter]
+    if id_filter:
+        files_data = [f for f in files_data if f.get("id") in id_filter]
+
+    if not files_data:
+        return {
+            "files": [],
+            "summary": f"No files matched the filter for patient {patient_id}.",
+        }
+
+    # 3. Limit to max files
+    if len(files_data) > _MAX_FILES_PER_READ:
+        files_data = files_data[:_MAX_FILES_PER_READ]
+
+    # 4. Download and process each file
+    processed_files = []
+    multimodal_parts = []  # OpenAI content parts for Gemini
+    text_summaries = []    # Fallback for non-vision models
+    total_bytes = 0
+
+    for f in files_data:
+        file_id = f["id"]
+        filename = f.get("filename", "unknown")
+        file_type = f.get("fileType", "document")
+        mime_type = f.get("mimeType", "application/octet-stream")
+        size_bytes = f.get("sizeBytes", 0)
+
+        # Check total size
+        if total_bytes + size_bytes > _MAX_TOTAL_BYTES:
+            processed_files.append({
+                "id": file_id,
+                "filename": filename,
+                "fileType": file_type,
+                "status": "skipped",
+                "reason": "Would exceed 20MB total limit",
+            })
+            continue
+
+        # Download file bytes — try patient-scoped endpoint first,
+        # then fall back to the general /api/files/{id}/download
+        try:
+            dl_url = (
+                f"{COOLIFY_FRONTEND_URL}/api/patients/{patient_id}"
+                f"/files/{file_id}/download"
+            )
+            dl_resp = requests.get(dl_url, timeout=60)
+
+            # Fallback: try the general file download endpoint
+            if not dl_resp.ok:
+                dl_url = f"{COOLIFY_FRONTEND_URL}/api/files/{file_id}/download"
+                dl_resp = requests.get(dl_url, timeout=60)
+
+            if not dl_resp.ok:
+                processed_files.append({
+                    "id": file_id,
+                    "filename": filename,
+                    "fileType": file_type,
+                    "status": "error",
+                    "reason": f"Download failed: {dl_resp.status_code}",
+                })
+                continue
+
+            raw_bytes = dl_resp.content
+            total_bytes += len(raw_bytes)
+        except Exception as e:
+            processed_files.append({
+                "id": file_id,
+                "filename": filename,
+                "status": "error",
+                "reason": str(e),
+            })
+            continue
+
+        # Process by file type
+        if file_type == "image":
+            try:
+                data_uri = _resize_image_to_base64(raw_bytes, mime_type)
+                multimodal_parts.append({
+                    "type": "image_url",
+                    "image_url": {"url": data_uri},
+                })
+                multimodal_parts.append({
+                    "type": "text",
+                    "text": f"[Image: {filename}]",
+                })
+                text_summaries.append(
+                    f"📷 {filename} — {len(raw_bytes)} bytes image "
+                    f"(use Gemini 2.5 Pro to view)"
+                )
+                processed_files.append({
+                    "id": file_id,
+                    "filename": filename,
+                    "fileType": file_type,
+                    "status": "loaded",
+                    "sizeBytes": len(raw_bytes),
+                })
+            except Exception as e:
+                processed_files.append({
+                    "id": file_id,
+                    "filename": filename,
+                    "status": "error",
+                    "reason": f"Image processing failed: {e}",
+                })
+
+        elif file_type == "pdf":
+            text_content = _extract_pdf_text(raw_bytes)
+            # PDF text goes to both multimodal and text summary
+            multimodal_parts.append({
+                "type": "text",
+                "text": f"[PDF: {filename}]\n{text_content}",
+            })
+            text_summaries.append(
+                f"📄 {filename}:\n{text_content[:2000]}"
+                + ("..." if len(text_content) > 2000 else "")
+            )
+            processed_files.append({
+                "id": file_id,
+                "filename": filename,
+                "fileType": file_type,
+                "status": "loaded",
+                "textLength": len(text_content),
+            })
+
+        elif file_type in ("genomic", "document"):
+            # Try to read as text
+            try:
+                text_content = raw_bytes.decode("utf-8", errors="replace")
+                # Truncate large text files
+                if len(text_content) > 5000:
+                    text_content = text_content[:5000] + "\n... (truncated)"
+                multimodal_parts.append({
+                    "type": "text",
+                    "text": f"[File: {filename}]\n{text_content}",
+                })
+                text_summaries.append(f"📋 {filename}:\n{text_content[:2000]}")
+                processed_files.append({
+                    "id": file_id,
+                    "filename": filename,
+                    "fileType": file_type,
+                    "status": "loaded",
+                    "textLength": len(text_content),
+                })
+            except Exception as e:
+                processed_files.append({
+                    "id": file_id,
+                    "filename": filename,
+                    "status": "error",
+                    "reason": f"Could not read as text: {e}",
+                })
+
+        else:
+            processed_files.append({
+                "id": file_id,
+                "filename": filename,
+                "fileType": file_type,
+                "status": "skipped",
+                "reason": f"Unsupported file type: {file_type}",
+            })
+
+    loaded_count = sum(1 for f in processed_files if f.get("status") == "loaded")
+    summary = (
+        f"Loaded {loaded_count} of {len(files_data)} files for patient {patient_id}."
+    )
+
+    return {
+        "files": processed_files,
+        "summary": summary,
+        # These special keys are consumed by run_chat_turn for multimodal injection
+        "_multimodal_parts": multimodal_parts,
+        "_text_summary": "\n\n".join(text_summaries) if text_summaries else summary,
+    }
 
 
 def _run_full_pipeline(arguments: dict) -> dict:
@@ -1047,6 +1380,13 @@ FALLBACK_MODELS = [
     ("Qwen/Qwen3.6-35B-A3B-FP8", "cloudrift"),
 ]
 
+# Premium models — opt-in only, never used as automatic fallback.
+# These require explicit user selection from the model dropdown.
+# "vertexai" provider uses OIDC + Workload Identity Federation (no keys).
+PREMIUM_MODELS = [
+    ("google/gemini-2.5-pro", "vertexai"),
+]
+
 
 def _is_retryable(exc: Exception) -> bool:
     """Check if an LLM error is retryable (rate limit or server error)."""
@@ -1085,13 +1425,24 @@ def run_chat_turn(
         {"type": "text",   "content": "Here are the results..."}
         {"type": "error",  "content": "Something went wrong"}
     """
+    import time as _time
+
     # Build fallback chain: requested model first, then others
     models_to_try = [(model, provider)] + [
         (m, p) for m, p in FALLBACK_MODELS if m != model
     ]
     active_model = model
+    active_provider = provider
+
+    # ── Response metadata tracking ───────────────────────────────
+    turn_start = _time.time()
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    tool_calls_count = 0
+    rounds_used = 0
 
     for _ in range(max_rounds):
+        rounds_used += 1
         # ── Call the LLM with fallback ───────────────────────────────
         response = None
         last_error = None
@@ -1101,13 +1452,15 @@ def run_chat_turn(
             if candidate_client is None:
                 continue  # Skip if provider client not available
             try:
-                response = candidate_client.chat.completions.create(
+                create_kwargs = dict(
                     model=candidate_model,
                     messages=messages,
+                    temperature=0.3,
                     tools=TOOLS,
                     tool_choice="auto",
-                    temperature=0.3,
                 )
+
+                response = candidate_client.chat.completions.create(**create_kwargs)
                 if candidate_model != active_model:
                     yield {
                         "type": "status",
@@ -1116,10 +1469,21 @@ def run_chat_turn(
                         ),
                     }
                     active_model = candidate_model
+                    active_provider = candidate_provider
                     # Update models_to_try so subsequent rounds use this model first
                     models_to_try = [(candidate_model, candidate_provider)] + [
                         (m, p) for m, p in FALLBACK_MODELS if m != candidate_model
                     ]
+
+                # Accumulate usage stats
+                if hasattr(response, 'usage') and response.usage:
+                    total_prompt_tokens += getattr(
+                        response.usage, 'prompt_tokens', 0
+                    ) or 0
+                    total_completion_tokens += getattr(
+                        response.usage, 'completion_tokens', 0
+                    ) or 0
+
                 break  # Success — stop trying
             except Exception as e:
                 last_error = e
@@ -1167,11 +1531,29 @@ def run_chat_turn(
         # ── No tool calls → final text response ─────────────────────
         if not assistant_msg.tool_calls:
             if assistant_msg.content:
-                yield {"type": "text", "content": assistant_msg.content}
+                elapsed = round(_time.time() - turn_start, 2)
+                metadata = {
+                    "model": active_model,
+                    "provider": active_provider,
+                    "prompt_tokens": total_prompt_tokens,
+                    "completion_tokens": total_completion_tokens,
+                    "total_tokens": (
+                        total_prompt_tokens + total_completion_tokens
+                    ),
+                    "tool_calls": tool_calls_count,
+                    "rounds": rounds_used,
+                    "latency_s": elapsed,
+                }
+                yield {
+                    "type": "text",
+                    "content": assistant_msg.content,
+                    "metadata": metadata,
+                }
             return
 
         # ── Execute each tool call ───────────────────────────────────
         for tc in assistant_msg.tool_calls:
+            tool_calls_count += 1
             tool_name = tc.function.name
             label = TOOL_LABELS.get(tool_name, f"🔧 Running {tool_name}")
             yield {"type": "status", "content": f"{label}..."}
@@ -1183,7 +1565,11 @@ def run_chat_turn(
 
             result = execute_tool(tool_name, args)
 
-            # Append tool result to history
+            # ── Multimodal injection for patient_read_files ──────────
+            multimodal_parts = result.pop("_multimodal_parts", [])
+            text_summary = result.pop("_text_summary", "")
+
+            # Append tool result to history (without heavy base64 data)
             messages.append(
                 {
                     "role": "tool",
@@ -1191,6 +1577,40 @@ def run_chat_turn(
                     "content": json.dumps(result, default=str),
                 }
             )
+
+            # If we have multimodal content, inject as a follow-up
+            # user message so Gemini can "see" the images
+            if multimodal_parts:
+                # Determine if current model supports vision
+                is_vision_model = (
+                    active_model in [m for m, p in PREMIUM_MODELS]
+                    or "gemini" in active_model.lower()
+                )
+
+                if is_vision_model:
+                    # Inject multimodal user message with images
+                    vision_content = [
+                        {
+                            "type": "text",
+                            "text": (
+                                "Here are the patient's files. "
+                                "Please analyze them carefully:"
+                            ),
+                        },
+                    ] + multimodal_parts
+                    messages.append({
+                        "role": "user",
+                        "content": vision_content,
+                    })
+                else:
+                    # Non-vision model: inject text-only summary
+                    messages.append({
+                        "role": "user",
+                        "content": (
+                            f"[File contents (text only — images require "
+                            f"Gemini 2.5 Pro)]:\n\n{text_summary}"
+                        ),
+                    })
 
             # Yield completion status
             if "error" in result:
