@@ -11,20 +11,28 @@ interface FileUploadProps {
 export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState("");
+  const [uploadedFiles, setUploadedFiles] = useState<string[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = useCallback(
-    async (file: File) => {
+  const handleFiles = useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
       setUploading(true);
+      const uploaded: string[] = [];
       try {
-        const result = await uploadFile(file);
-        setUploadedFile(result.filename);
-        onFileUploaded(result.path, result.filename);
+        for (let i = 0; i < files.length; i++) {
+          setUploadProgress(`Uploading ${i + 1}/${files.length}: ${files[i].name}`);
+          const result = await uploadFile(files[i]);
+          uploaded.push(result.filename);
+          onFileUploaded(result.path, result.filename);
+        }
+        setUploadedFiles(uploaded);
       } catch (err) {
         console.error("Upload failed:", err);
       } finally {
         setUploading(false);
+        setUploadProgress("");
       }
     },
     [onFileUploaded],
@@ -34,29 +42,31 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
     (e: React.DragEvent) => {
       e.preventDefault();
       setIsDragging(false);
-      const file = e.dataTransfer.files[0];
-      if (file) handleFile(file);
+      const files = Array.from(e.dataTransfer.files);
+      if (files.length) handleFiles(files);
     },
-    [handleFile],
+    [handleFiles],
   );
 
   const handleInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
+      const files = Array.from(e.target.files || []);
+      if (files.length) handleFiles(files);
     },
-    [handleFile],
+    [handleFiles],
   );
 
-  if (uploadedFile) {
+  if (uploadedFiles.length > 0) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[var(--primary)]/10 border border-[var(--primary)]/30 text-sm">
         <span>📎</span>
         <span className="text-[var(--primary)] truncate max-w-[200px]">
-          {uploadedFile}
+          {uploadedFiles.length === 1
+            ? uploadedFiles[0]
+            : `${uploadedFiles.length} files uploaded`}
         </span>
         <button
-          onClick={() => setUploadedFile(null)}
+          onClick={() => setUploadedFiles([])}
           className="text-[var(--muted-foreground)] hover:text-[var(--foreground)] ml-auto"
         >
           ✕
@@ -71,6 +81,7 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
         ref={inputRef}
         type="file"
         accept=".maf,.vcf,.tsv,.csv,.txt,.pdf,.png,.jpg,.jpeg,.gif,.bmp,.tiff,.dcm,.doc,.docx,.xlsx"
+        multiple
         onChange={handleInputChange}
         className="hidden"
       />
@@ -127,7 +138,7 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
           </svg>
         )}
         <span className="hidden sm:inline">
-          {uploading ? "Uploading..." : "Attach file"}
+          {uploading ? (uploadProgress || "Uploading...") : "Attach file"}
         </span>
       </button>
     </>
