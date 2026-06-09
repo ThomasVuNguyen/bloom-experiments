@@ -30,10 +30,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV CHATS_DIR=/app/data/chats
+ENV FILES_DIR=/app/data/files
+ENV UPLOADS_DIR=/app/data/uploads
 
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \
-    mkdir -p /app/data/chats && chown -R nextjs:nodejs /app/data
+    mkdir -p /app/data/chats /app/data/files /app/data/uploads && \
+    chown -R nextjs:nodejs /app/data
+
 
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./

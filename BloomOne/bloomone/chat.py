@@ -10,10 +10,71 @@ text response.
 from __future__ import annotations
 
 import json
+import os
 import traceback
 from typing import Generator
 
 from bloomone.config import BLOOMONE_VERSION
+
+
+# ── Coolify File Fetch (fallback when Modal volume doesn't have the file) ────
+
+COOLIFY_FRONTEND_URL = os.environ.get("COOLIFY_FRONTEND_URL", "")
+
+
+def fetch_from_coolify(file_id: str, dest_dir: str = "/data/uploads") -> str | None:
+    """
+    Fetch a file from the Coolify frontend's /api/files/:id/download endpoint.
+
+    Used as a fallback when the upload mirror to Modal fails and the
+    pipeline needs to access a file that only exists on the Coolify Mac Mini.
+
+    Returns the local path where the file was saved, or None on failure.
+    """
+    if not COOLIFY_FRONTEND_URL:
+        return None
+
+    import pathlib
+    import requests
+
+    try:
+        # First get metadata to know the filename
+        meta_url = f"{COOLIFY_FRONTEND_URL}/api/files/{file_id}"
+        meta_resp = requests.get(meta_url, timeout=10)
+        if not meta_resp.ok:
+            print(f"[coolify-fetch] Metadata request failed: {meta_resp.status_code}")
+            return None
+
+        metadata = meta_resp.json()
+        filename = metadata.get("filename", f"{file_id}.dat")
+
+        # Download the file
+        dl_url = f"{COOLIFY_FRONTEND_URL}/api/files/{file_id}/download"
+        dl_resp = requests.get(dl_url, timeout=60, stream=True)
+        if not dl_resp.ok:
+            print(f"[coolify-fetch] Download failed: {dl_resp.status_code}")
+            return None
+
+        # Save to Modal volume
+        pathlib.Path(dest_dir).mkdir(parents=True, exist_ok=True)
+        dest_path = f"{dest_dir}/{filename}"
+        with open(dest_path, "wb") as f:
+            for chunk in dl_resp.iter_content(chunk_size=8192):
+                f.write(chunk)
+
+        # Commit to volume so other containers see it
+        try:
+            from bloomone.config import volume
+            volume.commit()
+        except Exception:
+            pass
+
+        print(f"[coolify-fetch] Downloaded {filename} -> {dest_path}")
+        return dest_path
+
+    except Exception as e:
+        print(f"[coolify-fetch] Error: {e}")
+        return None
 
 
 # ── System Prompt ────────────────────────────────────────────────────────────
@@ -516,6 +577,15 @@ def _inspect_artifact(arguments: dict) -> dict:
 
     file_path = arguments["file_path"]
     max_rows = arguments.get("max_rows", 5)
+
+    if not os.path.exists(file_path):
+        # Try fetching from Coolify if we have a file ID in the path
+        # The file_id might be embedded in the path or passed separately
+        file_id = arguments.get("file_id")
+        if file_id:
+            fetched_path = fetch_from_coolify(file_id)
+            if fetched_path:
+                file_path = fetched_path
 
     if not os.path.exists(file_path):
         return {

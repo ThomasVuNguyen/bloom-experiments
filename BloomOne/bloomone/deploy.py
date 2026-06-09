@@ -206,6 +206,7 @@ GEMMA_MODEL = "google/gemma-4-31b-it:free"
             modal.Secret.from_name("openrouter-api-key"),
             modal.Secret.from_name("bloomone-api-key"),
             modal.Secret.from_name("cloudrift-api-key"),
+            modal.Secret.from_name("coolify-frontend-url", required_keys=["COOLIFY_FRONTEND_URL"]),
         ],
     timeout=1800,
     scaledown_window=120,
