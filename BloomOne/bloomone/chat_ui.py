@@ -60,7 +60,22 @@ def create_app(
     from fastapi import FastAPI, Header as fastapi_Header
     from openai import OpenAI
 
-    from bloomone.chat import SYSTEM_PROMPT, TOOL_LABELS, run_chat_turn
+    from bloomone.chat import SYSTEM_PROMPT, TOOL_LABELS, FALLBACK_MODELS, run_chat_turn
+
+    # Build model choices for the dropdown from the fallback chain
+    _provider_map = {m: p for m, p in FALLBACK_MODELS}
+    _display_names = {
+        "openrouter": "OpenRouter",
+        "cloudrift": "CloudRift",
+    }
+    model_choices = [
+        (
+            f"{m.split('/')[1].split(':')[0]}  "
+            f"({_display_names.get(p, p)})",
+            m,
+        )
+        for m, p in FALLBACK_MODELS
+    ]
 
     # ── OpenAI client (connects to Vertex AI / OpenRouter / Gemini) ────
 
@@ -95,7 +110,22 @@ def create_app(
             return "not-needed"
 
     api_key = _get_api_key()
-    client = OpenAI(base_url=llm_url, api_key=api_key)
+    openrouter_client = OpenAI(base_url=llm_url, api_key=api_key)
+
+    # CloudRift fallback client
+    cloudrift_key = os.environ.get("CLOUDRIFT_API_KEY", "")
+    cloudrift_client = (
+        OpenAI(
+            base_url="https://inference.cloudrift.ai/v1",
+            api_key=cloudrift_key,
+        )
+        if cloudrift_key
+        else None
+    )
+
+    clients = {"openrouter": openrouter_client}
+    if cloudrift_client:
+        clients["cloudrift"] = cloudrift_client
 
     # ── Gradio Interface (Gradio 6 compatible) ────────────────────────
     # In Gradio 6, theme/css/title moved from Blocks() to launch().
@@ -114,8 +144,8 @@ def create_app(
 
             ### Personalized Neoantigen Vaccine Pipeline
 
-            Powered by **Gemma 4 31B** — ask me to design a personalized
-            mRNA vaccine from tumor mutations.
+            AI-powered personalized mRNA vaccine design
+            from tumor mutations.
 
             </div>
             """,
@@ -141,7 +171,7 @@ def create_app(
                 placeholder="Describe your neoantigen analysis...",
                 show_label=False,
                 container=False,
-                scale=7,
+                scale=6,
                 autofocus=True,
             )
             file_upload = gr.File(
@@ -156,6 +186,18 @@ def create_app(
                 variant="primary",
                 scale=1,
                 min_width=80,
+            )
+
+        with gr.Accordion("⚙️ Model Settings", open=False):
+            model_dropdown = gr.Dropdown(
+                choices=model_choices,
+                value=model_name,
+                label="Primary Model",
+                info=(
+                    "Select the LLM to use. If it hits a rate limit, "
+                    "the system automatically falls back to the next model."
+                ),
+                interactive=True,
             )
 
         gr.Markdown(
@@ -254,8 +296,11 @@ def create_app(
             # Clear the file path after injecting into message
             return "", display_history, full_history, None
 
-        def bot_respond(display_history, full_history):
+        def bot_respond(display_history, full_history, selected_model):
             """Stream LLM response with tool-call status updates."""
+            # Resolve provider for the selected model
+            sel_provider = _provider_map.get(selected_model, "openrouter")
+
             # Build messages for LLM (system prompt + full history)
             llm_messages = [
                 {"role": "system", "content": SYSTEM_PROMPT}
@@ -265,7 +310,8 @@ def create_app(
             responded = False
 
             for update in run_chat_turn(
-                client, llm_messages, model=model_name
+                clients, llm_messages,
+                model=selected_model, provider=sel_provider,
             ):
                 if update["type"] == "status":
                     status_parts.append(update["content"])
@@ -339,7 +385,7 @@ def create_app(
             outputs=[msg, chatbot, openai_history, uploaded_file_path],
         ).then(
             bot_respond,
-            inputs=[chatbot, openai_history],
+            inputs=[chatbot, openai_history, model_dropdown],
             outputs=[chatbot, openai_history],
         )
 
@@ -349,7 +395,7 @@ def create_app(
             outputs=[msg, chatbot, openai_history, uploaded_file_path],
         ).then(
             bot_respond,
-            inputs=[chatbot, openai_history],
+            inputs=[chatbot, openai_history, model_dropdown],
             outputs=[chatbot, openai_history],
         )
 
@@ -377,6 +423,21 @@ def create_app(
     async def _health(request):
         return JSONResponse({"status": "ok", "model": model_name})
 
+    async def _models(request):
+        """Return available models for the frontend model picker."""
+        models_list = [
+            {
+                "id": m,
+                "provider": p,
+                "display_name": (
+                    f"{m.split('/')[1].split(':')[0]}  "
+                    f"({_display_names.get(p, p)})"
+                ),
+            }
+            for m, p in FALLBACK_MODELS
+        ]
+        return JSONResponse({"models": models_list, "default": model_name})
+
     async def _chat(request):
         # Auth check
         if _api_key:
@@ -388,6 +449,8 @@ def create_app(
 
         body = await request.json()
         messages = body.get("messages", [])
+        selected_model = body.get("model", model_name)
+        sel_provider = _provider_map.get(selected_model, "openrouter")
 
         llm_messages = [
             {"role": "system", "content": SYSTEM_PROMPT}
@@ -397,7 +460,8 @@ def create_app(
         final_text = ""
 
         for update in run_chat_turn(
-            client, llm_messages, model=model_name
+            clients, llm_messages,
+            model=selected_model, provider=sel_provider,
         ):
             if update["type"] == "status":
                 status_updates.append(update["content"])
@@ -472,6 +536,8 @@ def create_app(
 
         body = await request.json()
         messages = body.get("messages", [])
+        selected_model = body.get("model", model_name)
+        sel_provider = _provider_map.get(selected_model, "openrouter")
 
         llm_messages = [
             {"role": "system", "content": SYSTEM_PROMPT}
@@ -484,7 +550,8 @@ def create_app(
             def _run_pipeline():
                 try:
                     for update in run_chat_turn(
-                        client, llm_messages, model=model_name
+                        clients, llm_messages,
+                        model=selected_model, provider=sel_provider,
                     ):
                         q.put(update)
                 except Exception as exc:
@@ -543,6 +610,7 @@ def create_app(
 
     # Add REST routes AFTER Gradio mount (prepend so they take priority)
     app.routes.insert(0, Route("/v1/health", _health, methods=["GET"]))
+    app.routes.insert(0, Route("/v1/models", _models, methods=["GET"]))
     app.routes.insert(0, Route("/v1/chat/stream", _chat_stream, methods=["POST"]))
     app.routes.insert(0, Route("/v1/chat", _chat, methods=["POST"]))
     app.routes.insert(0, Route("/v1/upload", _upload, methods=["POST"]))

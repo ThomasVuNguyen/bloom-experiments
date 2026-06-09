@@ -10,13 +10,24 @@ import {
 import { Message } from "./message";
 import { PipelineStatus } from "./pipeline-status";
 import { FileUpload } from "./file-upload";
-import { streamChat, type ChatMessage } from "@/lib/api";
+import {
+  streamChat,
+  fetchModels,
+  type ChatMessage,
+  type ModelInfo,
+} from "@/lib/api";
 
 const EXAMPLES = [
   "Run the neoantigen vaccine pipeline for melanoma case TCGA-BF-A3DL-01 with HLA-A*02:01,HLA-B*07:02,HLA-C*07:01",
   "What data do you need to design a neoantigen vaccine?",
   "Explain the 7 pipeline stages",
 ];
+
+/** Provider badge colors */
+const PROVIDER_COLORS: Record<string, string> = {
+  openrouter: "oklch(0.72 0.18 160)",
+  cloudrift: "oklch(0.7 0.15 250)",
+};
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -40,8 +51,55 @@ export function Chat({
   const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
   const [streamingContent, setStreamingContent] = useState("");
 
+  // Model picker state
+  const [models, setModels] = useState<ModelInfo[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>("");
+  const [defaultModel, setDefaultModel] = useState<string>("");
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const modelPickerRef = useRef<HTMLDivElement>(null);
+
+  // Fetch models on mount
+  useEffect(() => {
+    fetchModels()
+      .then((data) => {
+        setModels(data.models);
+        setDefaultModel(data.default);
+        if (!selectedModel) {
+          setSelectedModel(data.default);
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to fetch models:", err);
+        // Hardcoded fallback if backend is unreachable
+        setModels([
+          {
+            id: "google/gemma-4-31b-it:free",
+            provider: "openrouter",
+            display_name: "gemma-4-31b-it  (OpenRouter)",
+          },
+        ]);
+        setSelectedModel("google/gemma-4-31b-it:free");
+        setDefaultModel("google/gemma-4-31b-it:free");
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Close model picker on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        modelPickerRef.current &&
+        !modelPickerRef.current.contains(event.target as Node)
+      ) {
+        setModelPickerOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   const scrollToBottom = useCallback(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -87,7 +145,7 @@ export function Chat({
       const collectedStatus: string[] = [];
 
       try {
-        for await (const event of streamChat(newHistory)) {
+        for await (const event of streamChat(newHistory, selectedModel || undefined)) {
           switch (event.type) {
             case "status":
               if (event.content) {
@@ -128,7 +186,7 @@ export function Chat({
       setStatusUpdates([]);
       setIsLoading(false);
     },
-    [input, isLoading, messages, llmHistory, uploadedFilePath, onMessagesChange, onLlmHistoryChange],
+    [input, isLoading, messages, llmHistory, uploadedFilePath, selectedModel, onMessagesChange, onLlmHistoryChange],
   );
 
   const handleFileUploaded = useCallback(
@@ -147,6 +205,11 @@ export function Chat({
     },
     [handleSubmit],
   );
+
+  const currentModel = models.find((m) => m.id === selectedModel);
+  const shortModelName = currentModel
+    ? currentModel.id.split("/")[1]?.split(":")[0] || currentModel.id
+    : "Loading...";
 
   return (
     <div className="flex flex-col h-screen flex-1 min-w-0">
@@ -182,6 +245,132 @@ export function Chat({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          {/* Model Picker */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              id="model-picker-trigger"
+              onClick={() => setModelPickerOpen(!modelPickerOpen)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs
+                       bg-[var(--secondary)] hover:bg-[var(--secondary)]/80
+                       border border-[var(--border)] transition-all duration-200
+                       text-[var(--foreground)]"
+              title="Select model"
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{
+                  background: currentModel
+                    ? PROVIDER_COLORS[currentModel.provider] || "var(--muted-foreground)"
+                    : "var(--muted-foreground)",
+                }}
+              />
+              <span className="max-w-[120px] truncate hidden sm:inline">
+                {shortModelName}
+              </span>
+              <svg
+                className={`w-3 h-3 transition-transform duration-200 ${
+                  modelPickerOpen ? "rotate-180" : ""
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M19.5 8.25l-7.5 7.5-7.5-7.5"
+                />
+              </svg>
+            </button>
+
+            {/* Dropdown */}
+            {modelPickerOpen && (
+              <div
+                className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-[var(--border)]
+                          bg-[var(--card)] shadow-2xl z-50 overflow-hidden
+                          animate-[fade-in_0.15s_ease-out]"
+              >
+                <div className="px-3 py-2 border-b border-[var(--border)]">
+                  <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-medium">
+                    Select Model
+                  </p>
+                </div>
+                <div className="py-1 max-h-64 overflow-y-auto">
+                  {models.map((model) => {
+                    const isActive = model.id === selectedModel;
+                    const isDefault = model.id === defaultModel;
+                    const modelShort =
+                      model.id.split("/")[1]?.split(":")[0] || model.id;
+
+                    return (
+                      <button
+                        key={model.id}
+                        id={`model-option-${model.provider}-${modelShort}`}
+                        onClick={() => {
+                          setSelectedModel(model.id);
+                          setModelPickerOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm
+                                  transition-colors duration-150
+                                  ${
+                                    isActive
+                                      ? "bg-[var(--primary)]/10 text-[var(--foreground)]"
+                                      : "text-[var(--foreground)] hover:bg-[var(--secondary)]"
+                                  }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{
+                            background:
+                              PROVIDER_COLORS[model.provider] ||
+                              "var(--muted-foreground)",
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate">
+                              {modelShort}
+                            </span>
+                            {isDefault && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)] font-medium uppercase">
+                                default
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-[var(--muted-foreground)] capitalize">
+                            {model.provider}
+                          </span>
+                        </div>
+                        {isActive && (
+                          <svg
+                            className="w-4 h-4 text-[var(--primary)] flex-shrink-0"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                            strokeWidth={2.5}
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M4.5 12.75l6 6 9-13.5"
+                            />
+                          </svg>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="px-3 py-2 border-t border-[var(--border)]">
+                  <p className="text-[10px] text-[var(--muted-foreground)] leading-relaxed">
+                    Auto-fallback is active — if the selected model fails,
+                    others are tried automatically.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+
           <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)] font-medium uppercase tracking-wide">
             Research Only
           </span>

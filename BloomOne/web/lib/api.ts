@@ -14,17 +14,40 @@ export interface StreamEvent {
   updated_messages?: ChatMessage[];
 }
 
+export interface ModelInfo {
+  id: string;
+  provider: string;
+  display_name: string;
+}
+
+export interface ModelsResponse {
+  models: ModelInfo[];
+  default: string;
+}
+
+/**
+ * Fetch available models from the backend.
+ */
+export async function fetchModels(): Promise<ModelsResponse> {
+  const response = await fetch("/api/models");
+  if (!response.ok) {
+    throw new Error(`Failed to fetch models: ${response.status}`);
+  }
+  return response.json();
+}
+
 /**
  * Send a chat message via SSE streaming.
  * Yields StreamEvents as they arrive from the backend.
  */
 export async function* streamChat(
   messages: ChatMessage[],
+  model?: string,
 ): AsyncGenerator<StreamEvent> {
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, ...(model && { model }) }),
   });
 
   if (!response.ok) {

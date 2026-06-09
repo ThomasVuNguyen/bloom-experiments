@@ -699,11 +699,13 @@ def _run_full_pipeline(arguments: dict) -> dict:
 
 
 # Default model fallback chain — tried in order on rate-limit / 5xx errors
+# Each entry is (model_id, provider_key) — provider_key maps to a client
 FALLBACK_MODELS = [
-    "google/gemma-4-31b-it:free",
-    "openai/gpt-oss-120b:free",
-    "qwen/qwen3-coder:free",
-    "nvidia/nemotron-3-super-120b-a12b:free",
+    ("google/gemma-4-31b-it:free", "openrouter"),
+    ("openai/gpt-oss-120b:free", "openrouter"),
+    ("qwen/qwen3-coder:free", "openrouter"),
+    ("nvidia/nemotron-3-super-120b-a12b:free", "openrouter"),
+    ("Qwen/Qwen3.6-35B-A3B-FP8", "cloudrift"),
 ]
 
 
@@ -714,9 +716,10 @@ def _is_retryable(exc: Exception) -> bool:
 
 
 def run_chat_turn(
-    client,
+    clients: dict,
     messages: list[dict],
     model: str = "google/gemma-4-31b-it:free",
+    provider: str = "openrouter",
     max_rounds: int = 10,
 ) -> Generator[dict, None, None]:
     """
@@ -725,11 +728,18 @@ def run_chat_turn(
     Sends messages to the LLM, handles tool calls, feeds results back,
     and repeats until the LLM produces a text response.
 
-    If the primary model hits a rate limit (429), automatically falls back
-    to the next model in the FALLBACK_MODELS chain.
+    If the primary model hits a rate limit (429) or other error, automatically
+    falls back to the next model in the FALLBACK_MODELS chain. Supports
+    multiple providers (e.g. OpenRouter, CloudRift) via the clients dict.
 
     Modifies ``messages`` in place — after exhausting the generator,
     ``messages`` contains the full conversation including tool calls.
+
+    Parameters
+    ----------
+    clients : dict[str, OpenAI]
+        Mapping of provider keys to OpenAI client instances.
+        E.g. {"openrouter": client, "cloudrift": client}
 
     Yields dicts of the form:
         {"type": "status", "content": "🧬 Stage 3: ..."}
@@ -737,8 +747,8 @@ def run_chat_turn(
         {"type": "error",  "content": "Something went wrong"}
     """
     # Build fallback chain: requested model first, then others
-    models_to_try = [model] + [
-        m for m in FALLBACK_MODELS if m != model
+    models_to_try = [(model, provider)] + [
+        (m, p) for m, p in FALLBACK_MODELS if m != model
     ]
     active_model = model
 
@@ -747,9 +757,12 @@ def run_chat_turn(
         response = None
         last_error = None
 
-        for candidate_model in models_to_try:
+        for candidate_model, candidate_provider in models_to_try:
+            candidate_client = clients.get(candidate_provider)
+            if candidate_client is None:
+                continue  # Skip if provider client not available
             try:
-                response = client.chat.completions.create(
+                response = candidate_client.chat.completions.create(
                     model=candidate_model,
                     messages=messages,
                     tools=TOOLS,
@@ -765,8 +778,8 @@ def run_chat_turn(
                     }
                     active_model = candidate_model
                     # Update models_to_try so subsequent rounds use this model first
-                    models_to_try = [candidate_model] + [
-                        m for m in FALLBACK_MODELS if m != candidate_model
+                    models_to_try = [(candidate_model, candidate_provider)] + [
+                        (m, p) for m, p in FALLBACK_MODELS if m != candidate_model
                     ]
                 break  # Success — stop trying
             except Exception as e:
@@ -779,10 +792,9 @@ def run_chat_turn(
                             f"rate-limited, trying next model..."
                         ),
                     }
-                    continue  # Try next model
-                else:
-                    yield {"type": "error", "content": f"LLM request failed: {e}"}
-                    return
+                # Continue to next model regardless — provider-specific
+                # errors shouldn't block other providers
+                continue
 
         if response is None:
             yield {
