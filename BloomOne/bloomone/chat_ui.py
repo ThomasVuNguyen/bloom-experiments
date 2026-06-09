@@ -189,9 +189,29 @@ def create_app(
             upload_dir = "/data/uploads"
             pathlib.Path(upload_dir).mkdir(parents=True, exist_ok=True)
 
-            filename = pathlib.Path(file).name
+            # Gradio 6 passes a filepath string
+            src_path = str(file)
+            filename = pathlib.Path(src_path).name
             dest = f"{upload_dir}/{filename}"
-            shutil.copy2(file, dest)
+
+            try:
+                shutil.copy2(src_path, dest)
+            except FileNotFoundError:
+                # Gradio may have cleaned up the temp file — try reading
+                # from the original path components
+                try:
+                    # If it's a NamedString or similar, read content
+                    if hasattr(file, 'read'):
+                        with open(dest, 'wb') as f:
+                            f.write(file.read())
+                    else:
+                        return current_path, gr.update(
+                            label="❌ Upload failed — file not found",
+                        )
+                except Exception:
+                    return current_path, gr.update(
+                        label="❌ Upload failed — try again",
+                    )
 
             # Commit to Modal volume so other containers can see it
             try:
@@ -435,6 +455,50 @@ def create_app(
             "size_bytes": len(contents),
         })
 
+    async def _chat_stream(request):
+        """SSE streaming endpoint for the Next.js frontend."""
+        import json as _json
+
+        # Auth check
+        if _api_key:
+            auth = request.headers.get("authorization", "")
+            if not auth.startswith("Bearer ") or auth[7:] != _api_key:
+                return JSONResponse(
+                    {"error": "Unauthorized"}, status_code=401
+                )
+
+        body = await request.json()
+        messages = body.get("messages", [])
+
+        llm_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ] + list(messages)
+
+        def event_generator():
+            for update in run_chat_turn(
+                client, llm_messages, model=model_name
+            ):
+                payload = _json.dumps(update, default=str)
+                yield f"data: {payload}\n\n"
+            # Send updated messages (minus system prompt) as final event
+            final = _json.dumps({
+                "type": "done",
+                "updated_messages": llm_messages[1:],
+            }, default=str)
+            yield f"data: {final}\n\n"
+
+        from starlette.responses import StreamingResponse
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     async def _root(request):
         return RedirectResponse(url="/chat")
 
@@ -443,6 +507,7 @@ def create_app(
 
     # Add REST routes AFTER Gradio mount (prepend so they take priority)
     app.routes.insert(0, Route("/v1/health", _health, methods=["GET"]))
+    app.routes.insert(0, Route("/v1/chat/stream", _chat_stream, methods=["POST"]))
     app.routes.insert(0, Route("/v1/chat", _chat, methods=["POST"]))
     app.routes.insert(0, Route("/v1/upload", _upload, methods=["POST"]))
     app.routes.insert(0, Route("/", _root, methods=["GET"]))
