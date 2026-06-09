@@ -81,8 +81,33 @@ def register_inspect_tools(mcp):
                 result["error"] = f"Failed to parse FASTA: {e}"
             return result
 
-        # ── TSV/MAF files ──
+        # ── TSV/MAF/CSV files ──
         if file_path.endswith((".tsv", ".maf", ".csv", ".txt")):
+            # For .txt files, check if it's actually tabular or free-text
+            if file_path.endswith(".txt"):
+                try:
+                    with open(file_path, encoding="utf-8", errors="replace") as f:
+                        first_lines = [f.readline() for _ in range(5)]
+                    first_line = first_lines[0].strip()
+                    # Heuristic: if the first line has fewer than 3 tab-separated
+                    # fields and fewer than 3 comma-separated fields, treat as text
+                    tab_cols = len(first_line.split("\t"))
+                    csv_cols = len(first_line.split(","))
+                    if tab_cols < 3 and csv_cols < 3:
+                        # It's a free-text file — return raw content
+                        result["file_type"] = "text"
+                        with open(file_path, encoding="utf-8", errors="replace") as f:
+                            content = f.read(50_000)  # Cap at 50KB
+                        result["content"] = content
+                        result["total_lines"] = content.count("\n") + 1
+                        result["summary"] = (
+                            f"Free-text file ({result['total_lines']} lines, "
+                            f"{stat.st_size} bytes). Full content included."
+                        )
+                        return result
+                except Exception:
+                    pass  # Fall through to tabular parsing
+
             result["file_type"] = "tabular"
             try:
                 import pandas as pd
@@ -167,6 +192,25 @@ def register_inspect_tools(mcp):
 
             except Exception as e:
                 result["error"] = f"Failed to parse tabular file: {e}"
+            return result
+
+        # ── Image files ──
+        if file_path.endswith((".png", ".jpg", ".jpeg", ".gif", ".bmp", ".tiff", ".webp")):
+            result["file_type"] = "image"
+            result["summary"] = (
+                f"Image file ({stat.st_size} bytes). "
+                "Use a vision-capable model to analyze this image."
+            )
+            return result
+
+        # ── PDF files ──
+        if file_path.endswith(".pdf"):
+            result["file_type"] = "pdf"
+            result["summary"] = (
+                f"PDF document ({stat.st_size} bytes). "
+                "PDF text extraction is not yet supported. "
+                "Ask the user to extract text or provide a text version."
+            )
             return result
 
         # ── Unknown file type ──
