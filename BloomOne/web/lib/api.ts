@@ -44,47 +44,90 @@ export async function* streamChat(
   messages: ChatMessage[],
   model?: string,
 ): AsyncGenerator<StreamEvent> {
-  const response = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages, ...(model && { model }) }),
-  });
+  const MAX_RETRIES = 2;
+  const RETRY_DELAY_MS = 3000;
 
-  if (!response.ok) {
-    const err = await response.text();
-    yield { type: "error", content: `API error: ${response.status} — ${err}` };
-    return;
-  }
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const response = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, ...(model && { model }) }),
+      });
 
-  const reader = response.body?.getReader();
-  if (!reader) {
-    yield { type: "error", content: "No response body" };
-    return;
-  }
+      if (!response.ok) {
+        const err = await response.text();
 
-  const decoder = new TextDecoder();
-  let buffer = "";
+        // Check if the backend says it's retryable (cold start / network)
+        try {
+          const parsed = JSON.parse(err);
+          if (parsed.retryable && attempt < MAX_RETRIES) {
+            yield {
+              type: "status",
+              content: "⏳ Server is waking up, retrying...",
+            };
+            await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+            continue;
+          }
+        } catch {
+          // Not JSON, fall through
+        }
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() || "";
-
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed || !trimmed.startsWith("data: ")) continue;
-      const data = trimmed.slice(6);
-      if (data === "[DONE]") return;
-
-      try {
-        const event: StreamEvent = JSON.parse(data);
-        yield event;
-      } catch {
-        // Skip unparseable lines
+        yield { type: "error", content: `API error: ${response.status} — ${err}` };
+        return;
       }
+
+      const reader = response.body?.getReader();
+      if (!reader) {
+        yield { type: "error", content: "No response body" };
+        return;
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") return;
+
+          try {
+            const event: StreamEvent = JSON.parse(data);
+            yield event;
+          } catch {
+            // Skip unparseable lines
+          }
+        }
+      }
+
+      // If we get here, stream completed successfully
+      return;
+    } catch (error) {
+      // Network-level failure (fetch itself threw)
+      if (attempt < MAX_RETRIES) {
+        yield {
+          type: "status",
+          content: `⏳ Connection failed, retrying (${attempt + 1}/${MAX_RETRIES})...`,
+        };
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * (attempt + 1)));
+        continue;
+      }
+
+      // Exhausted retries
+      yield {
+        type: "error",
+        content: `Connection error: ${error instanceof Error ? error.message : "network error"}`,
+      };
+      return;
     }
   }
 }
