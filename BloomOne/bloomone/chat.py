@@ -711,6 +711,25 @@ def _run_full_pipeline(arguments: dict) -> dict:
         hla_alleles=alleles,
         patient_id=patient_id,
     )
+
+    # If IEDB failed and local MHCflurry isn't available, try the remote GPU function
+    if bind.strong_binders == 0 and "No binding predictions" in (bind.summary or ""):
+        print("\n🔄 Local binding prediction failed — trying remote MHCflurry GPU...")
+        try:
+            import modal
+            mhcflurry_fn = modal.Function.from_name("bloomone", "run_mhcflurry_remote")
+            remote_result = mhcflurry_fn.remote(
+                peptides_path=pep.candidates_path,
+                hla_alleles=alleles,
+                patient_id=patient_id,
+            )
+            # Re-hydrate BindingResult from the dict returned by the remote function
+            from bloomone.models import BindingResult as BR
+            bind = BR(**remote_result)
+            print(f"✅ Remote MHCflurry GPU returned {bind.strong_binders} strong binders")
+        except Exception as e:
+            print(f"⚠️ Remote MHCflurry GPU fallback failed: {e}")
+            # Keep the original failed bind result
     safe = filter_self_similarity(
         binders_path=bind.predictions_path, patient_id=patient_id
     )

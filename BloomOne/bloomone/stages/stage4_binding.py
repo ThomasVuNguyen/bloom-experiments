@@ -168,9 +168,8 @@ def predict_binding(
     """
     Stage 4: HLA-I binding prediction.
 
-    Tries MHCflurry 2.0 first (GPU-accelerated presentation predictor).
-    Falls back to IEDB NetMHCpan 4.1 API if MHCflurry is unavailable or
-    fails for specific alleles.
+    Tries IEDB NetMHCpan 4.1 API first (free, no GPU cost).
+    Falls back to MHCflurry 2.0 (GPU) if IEDB fails.
 
     Filters to strong binders: IC50 < 500nM OR %rank < 0.5
 
@@ -178,7 +177,7 @@ def predict_binding(
         peptides_path: Path to peptide candidates TSV from Stage 3
         hla_alleles: Patient HLA-I alleles (e.g. ['HLA-A*02:01', 'HLA-B*07:02'])
         patient_id: Patient identifier
-        use_mhcflurry: Whether to try MHCflurry first (default True)
+        use_mhcflurry: Whether to try MHCflurry as fallback (default True)
 
     Returns:
         BindingResult with strong binder predictions
@@ -194,18 +193,17 @@ def predict_binding(
     print(f"Unique peptides to score: {len(unique_peptides)}")
     print(f"HLA alleles: {hla_alleles}")
 
-    # Run predictions
-    method = "mhcflurry"
+    # Run predictions — IEDB first (free), MHCflurry as fallback (GPU cost)
+    method = "netmhcpan_iedb"
     raw_results = []
 
-    if use_mhcflurry:
-        print("\nTrying MHCflurry 2.0...")
-        raw_results = predict_mhcflurry(unique_peptides, hla_alleles)
+    print("\nTrying IEDB NetMHCpan API (free)...")
+    raw_results = predict_iedb(unique_peptides, hla_alleles)
 
-    if not raw_results:
-        print("\nFalling back to IEDB NetMHCpan API...")
-        method = "netmhcpan_iedb"
-        raw_results = predict_iedb(unique_peptides, hla_alleles)
+    if not raw_results and use_mhcflurry:
+        print("\n⚠️ IEDB failed — falling back to MHCflurry 2.0 (GPU)...")
+        method = "mhcflurry"
+        raw_results = predict_mhcflurry(unique_peptides, hla_alleles)
 
     if not raw_results:
         print("  ❌ No binding predictions obtained")
@@ -214,7 +212,7 @@ def predict_binding(
         return BindingResult(
             stage=4,
             stage_name="HLA Binding Prediction",
-            summary="No binding predictions obtained. Both MHCflurry and IEDB API failed.",
+            summary="No binding predictions obtained. Both IEDB API and MHCflurry failed.",
             next_action="Check HLA allele format and retry. Use validate_inputs for pre-flight checks.",
             provenance={"method": method, "alleles": hla_alleles},
             warnings=["No binding predictions — pipeline cannot continue without binders."],
