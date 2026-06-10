@@ -58,11 +58,11 @@ export function Message({ message, isStreaming }: MessageProps) {
 
         {/* Info button — assistant messages only, with metadata */}
         {!isUser && meta && !isStreaming && (
-          <div className="relative inline-block">
+          <>
             <button
               id="message-info-toggle"
               onClick={() => setShowInfo(!showInfo)}
-              className="absolute -bottom-1 right-1 w-5 h-5 rounded-full
+              className="absolute -bottom-2 left-2 w-5 h-5 rounded-full
                        flex items-center justify-center text-[10px]
                        bg-[var(--secondary)] text-[var(--muted-foreground)]
                        border border-[var(--border)]
@@ -78,7 +78,7 @@ export function Message({ message, isStreaming }: MessageProps) {
             {/* Info tooltip */}
             {showInfo && (
               <div
-                className="absolute bottom-7 right-0 w-64 rounded-xl
+                className="absolute top-full left-0 mt-2 w-64 rounded-xl
                          bg-[var(--card)] border border-[var(--border)]
                          shadow-2xl z-50 overflow-hidden
                          animate-[fade-in_0.15s_ease-out]"
@@ -113,7 +113,7 @@ export function Message({ message, isStreaming }: MessageProps) {
                 </div>
               </div>
             )}
-          </div>
+          </>
         )}
       </div>
 

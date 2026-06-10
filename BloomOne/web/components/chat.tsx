@@ -150,6 +150,8 @@ export function Chat({
       let updatedHistory = newHistory;
       const collectedStatus: string[] = [];
 
+      let latestMetadata: ResponseMetadata | null = null;
+
       try {
         for await (const event of streamChat(newHistory, selectedModel || undefined)) {
           switch (event.type) {
@@ -163,6 +165,7 @@ export function Chat({
               finalText = event.content || "";
               setStreamingContent(finalText);
               if (event.metadata) {
+                latestMetadata = event.metadata;
                 setStreamingMetadata(event.metadata);
               }
               break;
@@ -185,7 +188,7 @@ export function Chat({
         const assistantMessage: ChatMessage = {
           role: "assistant",
           content: finalText,
-          metadata: streamingMetadata ?? undefined,
+          metadata: latestMetadata ?? undefined,
         };
         const finalMessages = [...newMessages, assistantMessage];
         onMessagesChange(finalMessages);
@@ -197,7 +200,7 @@ export function Chat({
       setStatusUpdates([]);
       setIsLoading(false);
     },
-    [input, isLoading, messages, llmHistory, uploadedFiles, selectedModel, streamingMetadata, onMessagesChange, onLlmHistoryChange],
+    [input, isLoading, messages, llmHistory, uploadedFiles, selectedModel, onMessagesChange, onLlmHistoryChange],
   );
 
   const handleFileUploaded = useCallback(
