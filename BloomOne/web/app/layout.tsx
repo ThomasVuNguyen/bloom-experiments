@@ -1,21 +1,30 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { DM_Sans, DM_Serif_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const geist = Geist({
+const dmSans = DM_Sans({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-geist",
+  variable: "--font-dm-sans",
+  weight: ["400", "500", "600", "700"],
 });
 
-const geistMono = Geist_Mono({
+const dmSerif = DM_Serif_Display({
   subsets: ["latin"],
   display: "swap",
-  variable: "--font-geist-mono",
+  variable: "--font-dm-serif",
+  weight: "400",
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-jetbrains-mono",
+  weight: "400",
 });
 
 export const metadata: Metadata = {
-  title: "BloomOne — AI Neoantigen Vaccine Design",
+  title: "BloomOne — Personalized Neoantigen Vaccine Design",
   description:
     "Transform tumor DNA into personalized mRNA neoantigen vaccine constructs with AI-powered pipeline orchestration.",
   icons: { icon: "/favicon.ico" },
@@ -31,9 +40,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en">
       <body
-        className={`${geist.variable} ${geistMono.variable} antialiased min-h-screen`}
+        className={`${dmSans.variable} ${dmSerif.variable} ${jetbrainsMono.variable} antialiased min-h-screen`}
       >
         {children}
       </body>

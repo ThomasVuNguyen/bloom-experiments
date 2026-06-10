@@ -24,11 +24,71 @@ const EXAMPLES = [
   "Explain the 7 pipeline stages",
 ];
 
-/** Provider badge colors */
+/** Provider badge colors — CSS variable / hex values only */
 const PROVIDER_COLORS: Record<string, string> = {
-  openrouter: "oklch(0.72 0.18 160)",
-  cloudrift: "oklch(0.7 0.15 250)",
+  openrouter: "var(--primary)",
+  cloudrift: "#6a9bcc",
 };
+
+/** Reusable Bloom SVG icon */
+function BloomIcon({ className = "w-7 h-7" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      className={className}
+    >
+      <circle cx="16" cy="13" r="4" fill="var(--primary)" opacity="0.9" />
+      <ellipse
+        cx="10.5"
+        cy="15.5"
+        rx="3.5"
+        ry="4.5"
+        transform="rotate(-30 10.5 15.5)"
+        fill="var(--primary)"
+        opacity="0.6"
+      />
+      <ellipse
+        cx="21.5"
+        cy="15.5"
+        rx="3.5"
+        ry="4.5"
+        transform="rotate(30 21.5 15.5)"
+        fill="var(--primary)"
+        opacity="0.6"
+      />
+      <ellipse
+        cx="12"
+        cy="20"
+        rx="3.5"
+        ry="4.5"
+        transform="rotate(-60 12 20)"
+        fill="var(--primary)"
+        opacity="0.45"
+      />
+      <ellipse
+        cx="20"
+        cy="20"
+        rx="3.5"
+        ry="4.5"
+        transform="rotate(60 20 20)"
+        fill="var(--primary)"
+        opacity="0.45"
+      />
+      <circle cx="16" cy="16" r="2.5" fill="var(--accent)" />
+      <rect
+        x="15.25"
+        y="20"
+        width="1.5"
+        height="8"
+        rx="0.75"
+        fill="var(--primary)"
+        opacity="0.7"
+      />
+    </svg>
+  );
+}
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -228,15 +288,15 @@ export function Chat({
   return (
     <div className="flex flex-col h-screen flex-1 min-w-0">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-[var(--border)]">
+      <header className="flex items-center justify-between px-4 py-3 bg-card/80 backdrop-blur-sm border-b border-border">
         <div className="flex items-center gap-3">
           {/* Mobile sidebar toggle */}
           <button
             onClick={onSidebarToggle}
-            className="p-1.5 rounded-lg hover:bg-[var(--secondary)] transition-colors lg:hidden"
+            className="p-1.5 rounded-lg hover:bg-secondary transition-colors lg:hidden"
           >
             <svg
-              className="w-5 h-5 text-[var(--foreground)]"
+              className="w-5 h-5 text-foreground"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -249,11 +309,12 @@ export function Chat({
               />
             </svg>
           </button>
+          <BloomIcon className="w-7 h-7" />
           <div>
-            <h1 className="text-base font-semibold text-[var(--foreground)]">
+            <h1 className="text-base font-semibold text-foreground font-serif">
               BloomOne
             </h1>
-            <p className="text-xs text-[var(--muted-foreground)]">
+            <p className="text-xs text-muted-foreground">
               Neoantigen Vaccine Design
             </p>
           </div>
@@ -265,9 +326,9 @@ export function Chat({
               id="model-picker-trigger"
               onClick={() => setModelPickerOpen(!modelPickerOpen)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs
-                       bg-[var(--secondary)] hover:bg-[var(--secondary)]/80
-                       border border-[var(--border)] transition-all duration-200
-                       text-[var(--foreground)]"
+                       bg-secondary border border-border hover:bg-muted
+                       transition-all duration-200
+                       text-foreground"
               title="Select model"
             >
               <span
@@ -301,12 +362,12 @@ export function Chat({
             {/* Dropdown */}
             {modelPickerOpen && (
               <div
-                className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-[var(--border)]
-                          bg-[var(--card)] shadow-2xl z-50 overflow-hidden
+                className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-border
+                          bg-card shadow-lg z-50 overflow-hidden
                           animate-[fade-in_0.15s_ease-out]"
               >
-                <div className="px-3 py-2 border-b border-[var(--border)]">
-                  <p className="text-[10px] uppercase tracking-wider text-[var(--muted-foreground)] font-medium">
+                <div className="px-3 py-2 border-b border-border">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
                     Select Model
                   </p>
                 </div>
@@ -329,8 +390,8 @@ export function Chat({
                                   transition-colors duration-150
                                   ${
                                     isActive
-                                      ? "bg-[var(--primary)]/10 text-[var(--foreground)]"
-                                      : "text-[var(--foreground)] hover:bg-[var(--secondary)]"
+                                      ? "bg-primary/10 text-foreground"
+                                      : "text-foreground hover:bg-secondary"
                                   }`}
                       >
                         <span
@@ -347,18 +408,18 @@ export function Chat({
                               {modelShort}
                             </span>
                             {isDefault && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)] font-medium uppercase">
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium uppercase">
                                 default
                               </span>
                             )}
                           </div>
-                          <span className="text-[10px] text-[var(--muted-foreground)] capitalize">
+                          <span className="text-[10px] text-muted-foreground capitalize">
                             {model.provider}
                           </span>
                         </div>
                         {isActive && (
                           <svg
-                            className="w-4 h-4 text-[var(--primary)] flex-shrink-0"
+                            className="w-4 h-4 text-primary flex-shrink-0"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -375,8 +436,8 @@ export function Chat({
                     );
                   })}
                 </div>
-                <div className="px-3 py-2 border-t border-[var(--border)]">
-                  <p className="text-[10px] text-[var(--muted-foreground)] leading-relaxed">
+                <div className="px-3 py-2 border-t border-border">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
                     Auto-fallback is active — if the selected model fails,
                     others are tried automatically.
                   </p>
@@ -385,7 +446,7 @@ export function Chat({
             )}
           </div>
 
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)] font-medium uppercase tracking-wide">
+          <span className="text-[10px] px-2 py-0.5 rounded-full text-muted-foreground font-medium uppercase tracking-wide border border-border">
             Research Only
           </span>
         </div>
@@ -398,20 +459,21 @@ export function Chat({
             {/* Ambient glow */}
             <div className="relative mb-8">
               <div
-                className="absolute inset-0 w-24 h-24 rounded-full mx-auto opacity-30"
+                className="absolute inset-0 w-24 h-24 rounded-full mx-auto animate-[bloom-grow_2.5s_ease-in-out_infinite]"
                 style={{
                   background:
-                    "radial-gradient(circle, oklch(0.72 0.18 160) 0%, transparent 70%)",
-                  animation: "pulse-glow 3s ease-in-out infinite",
+                    "radial-gradient(circle, rgba(72,92,17,0.12) 0%, transparent 70%)",
                 }}
               />
-              <div className="text-6xl relative z-10">🧬</div>
+              <div className="relative z-10 flex items-center justify-center">
+                <BloomIcon className="w-16 h-16" />
+              </div>
             </div>
 
-            <h2 className="text-xl font-semibold text-[var(--foreground)] mb-2">
+            <h2 className="text-xl font-semibold text-foreground mb-2 font-serif">
               Welcome to BloomOne
             </h2>
-            <p className="text-sm text-[var(--muted-foreground)] max-w-md mb-8 leading-relaxed">
+            <p className="text-sm text-muted-foreground max-w-md mb-8 leading-relaxed">
               Design personalized mRNA neoantigen vaccine constructs from tumor
               mutations. Upload a MAF file or start with a TCGA case.
             </p>
@@ -421,8 +483,9 @@ export function Chat({
                 <button
                   key={i}
                   onClick={() => handleSubmit(undefined, example)}
-                  className="text-left px-4 py-3 rounded-xl glass text-sm text-[var(--foreground)]
-                           hover:border-[var(--primary)]/50 transition-all duration-200
+                  className="text-left px-4 py-3 rounded-xl glass text-sm text-foreground
+                           border border-transparent hover:border-primary/20 hover:shadow-sm
+                           transition-all duration-200
                            hover:translate-y-[-1px] active:translate-y-0"
                 >
                   {example}
@@ -450,36 +513,42 @@ export function Chat({
             ) : (
               statusUpdates.length === 0 && (
                 <div className="flex gap-3 animate-[fade-in_0.3s_ease-out]">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-[var(--primary)] text-sm flex-shrink-0">
-                    🧬
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-accent text-sm flex-shrink-0 p-1.5">
+                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
+                      <circle cx="16" cy="13" r="4" fill="#FFFDF8" opacity="0.9"/>
+                      <ellipse cx="10.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(-30 10.5 15.5)" fill="#FFFDF8" opacity="0.6"/>
+                      <ellipse cx="21.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(30 21.5 15.5)" fill="#FFFDF8" opacity="0.6"/>
+                      <ellipse cx="12" cy="20" rx="3.5" ry="4.5" transform="rotate(-60 12 20)" fill="#FFFDF8" opacity="0.45"/>
+                      <ellipse cx="20" cy="20" rx="3.5" ry="4.5" transform="rotate(60 20 20)" fill="#FFFDF8" opacity="0.45"/>
+                      <circle cx="16" cy="16" r="2.5" fill="#FFFDF8"/>
+                      <rect x="15.25" y="20" width="1.5" height="8" rx="0.75" fill="#FFFDF8" opacity="0.7"/>
+                    </svg>
                   </div>
                   <div className="glass rounded-2xl px-4 py-3 max-w-xs">
                     <div className="flex items-center gap-2.5">
                       <div className="flex gap-1">
                         <div
-                          className="w-2 h-2 rounded-full bg-[var(--primary)]"
+                          className="w-2 h-2 rounded-full bg-primary"
                           style={{
                             animation: "typing-bounce 1.4s ease-in-out infinite",
                           }}
                         />
                         <div
-                          className="w-2 h-2 rounded-full bg-[var(--primary)]"
+                          className="w-2 h-2 rounded-full bg-primary"
                           style={{
                             animation:
                               "typing-bounce 1.4s ease-in-out 0.2s infinite",
                           }}
                         />
                         <div
-                          className="w-2 h-2 rounded-full bg-[var(--primary)]"
+                          className="w-2 h-2 rounded-full bg-primary"
                           style={{
                             animation:
                               "typing-bounce 1.4s ease-in-out 0.4s infinite",
                           }}
                         />
                       </div>
-                      <span className="text-xs text-[var(--muted-foreground)]" style={{
-                        animation: "pulse-glow 2s ease-in-out infinite",
-                      }}>
+                      <span className="text-xs text-muted-foreground">
                         Thinking...
                       </span>
                     </div>
@@ -494,7 +563,7 @@ export function Chat({
       </div>
 
       {/* Input area */}
-      <div className="border-t border-[var(--border)] px-4 py-3">
+      <div className="bg-card border-t border-border px-4 py-3">
         <form
           onSubmit={handleSubmit}
           className="flex items-end gap-2 max-w-3xl mx-auto"
@@ -513,9 +582,9 @@ export function Chat({
               placeholder="Describe your neoantigen analysis..."
               disabled={isLoading}
               rows={1}
-              className="w-full px-4 py-3 rounded-xl bg-[var(--input)] border border-[var(--border)]
-                       text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]
-                       focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent
+              className="w-full px-4 py-3 rounded-xl bg-input border border-border
+                       text-foreground placeholder:text-muted-foreground
+                       focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
                        resize-none transition-all duration-200 text-sm
                        disabled:opacity-50 disabled:cursor-not-allowed"
             />
@@ -525,8 +594,8 @@ export function Chat({
             type="submit"
             disabled={isLoading || (!input.trim() && uploadedFiles.length === 0)}
             className="flex-shrink-0 p-3 rounded-xl transition-all duration-200
-                     bg-[var(--primary)] text-[var(--primary-foreground)]
-                     hover:opacity-90 active:scale-95
+                     bg-accent text-accent-foreground
+                     hover:bg-[#c4613f] active:scale-95
                      disabled:opacity-30 disabled:cursor-not-allowed"
           >
             <svg
@@ -545,7 +614,7 @@ export function Chat({
           </button>
         </form>
 
-        <p className="text-[10px] text-[var(--muted-foreground)] text-center mt-2">
+        <p className="text-[10px] text-muted-foreground text-center mt-2">
           ⚠️ All outputs are for research use only · Not validated for clinical
           decisions
         </p>

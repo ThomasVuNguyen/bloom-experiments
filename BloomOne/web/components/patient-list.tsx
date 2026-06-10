@@ -18,15 +18,40 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
+/** Small bloom icon for pipeline dots */
+function SmallBloomIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 inline-block">
+      <circle cx="8" cy="7" r="2.5" fill="var(--primary)" opacity="0.9" />
+      <circle cx="8" cy="8" r="1.2" fill="var(--accent)" />
+      <ellipse cx="5.5" cy="8.5" rx="2" ry="2.5" transform="rotate(-30 5.5 8.5)" fill="var(--primary)" opacity="0.5" />
+      <ellipse cx="10.5" cy="8.5" rx="2" ry="2.5" transform="rotate(30 10.5 8.5)" fill="var(--primary)" opacity="0.5" />
+    </svg>
+  );
+}
+
+/** Small paperclip icon for file count */
+function SmallPaperclipIcon() {
+  return (
+    <svg className="w-2.5 h-2.5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+      />
+    </svg>
+  );
+}
+
 /** Compact pipeline progress dots (stages 1-7) */
 function PipelineDots({ runCount }: { runCount: number }) {
   if (runCount === 0) return null;
   return (
     <span
-      className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--primary)]/15 text-[var(--primary)]"
+      className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
       title={`${runCount} pipeline run${runCount > 1 ? "s" : ""}`}
     >
-      🧬 {runCount}
+      <SmallBloomIcon /> {runCount}
     </span>
   );
 }
@@ -46,30 +71,31 @@ function PatientCard({
     <button
       onClick={onSelect}
       className={`w-full text-left px-3 py-2.5 rounded-lg text-sm transition-all duration-150 group
+        bg-card border
         ${
           isActive
-            ? "bg-[var(--secondary)] text-[var(--foreground)]"
-            : "text-[var(--muted-foreground)] hover:bg-[var(--secondary)]/50 hover:text-[var(--foreground)]"
+            ? "bg-secondary border-l-2 border-primary"
+            : "border-border hover:bg-secondary/50"
         }`}
     >
       <div className="flex items-start justify-between gap-1">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-medium text-[var(--foreground)] truncate">
+            <span className="text-foreground font-medium truncate">
               {patient.name}
             </span>
             {patient.fileCount > 0 && (
               <span
-                className="text-[10px] px-1.5 py-0.5 rounded-full bg-[var(--muted)]/50 text-[var(--muted-foreground)]"
+                className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground"
                 title={`${patient.fileCount} file${patient.fileCount > 1 ? "s" : ""}`}
               >
-                📎 {patient.fileCount}
+                <SmallPaperclipIcon /> {patient.fileCount}
               </span>
             )}
             <PipelineDots runCount={patient.runCount} />
           </div>
           {patient.dob && (
-            <span className="text-[10px] text-[var(--muted-foreground)] mt-0.5 block">
+            <span className="text-[10px] text-muted-foreground mt-0.5 block">
               DOB: {formatDate(patient.dob)}
             </span>
           )}
@@ -81,7 +107,7 @@ function PatientCard({
               onDelete();
             }
           }}
-          className="flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded hover:bg-[var(--destructive)]/20"
+          className="flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           title="Delete patient"
         >
           <svg
@@ -99,7 +125,7 @@ function PatientCard({
           </svg>
         </button>
       </div>
-      <span className="text-[10px] text-[var(--muted-foreground)] mt-0.5 block">
+      <span className="text-[10px] text-muted-foreground mt-0.5 block">
         Added {formatDate(patient.createdAt)}
       </span>
     </button>
@@ -146,14 +172,14 @@ export function PatientList({
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="w-5 h-5 border-2 border-[var(--primary)]/30 border-t-[var(--primary)] rounded-full animate-spin" />
+        <div className="w-5 h-5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
       </div>
     );
   }
 
   if (patients.length === 0) {
     return (
-      <p className="text-xs text-[var(--muted-foreground)] text-center py-8 px-4">
+      <p className="text-xs text-muted-foreground text-center py-8 px-4">
         No patients yet. The agent will create records during chat, or add one manually.
       </p>
     );

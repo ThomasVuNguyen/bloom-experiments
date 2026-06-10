@@ -46,34 +46,51 @@ export function LoginGate({ children }: LoginGateProps) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      {/* Background gradient orbs */}
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      {/* Background gradient orbs — soft sage/cream */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none">
         <div
-          className="absolute top-1/4 -left-32 w-96 h-96 rounded-full opacity-20"
+          className="absolute top-1/4 -left-32 w-96 h-96 rounded-full opacity-30"
           style={{
             background:
-              "radial-gradient(circle, oklch(0.72 0.18 160) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--primary) 0%, transparent 70%)",
           }}
         />
         <div
-          className="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full opacity-15"
+          className="absolute bottom-1/4 -right-32 w-96 h-96 rounded-full opacity-20"
           style={{
             background:
-              "radial-gradient(circle, oklch(0.65 0.2 170) 0%, transparent 70%)",
+              "radial-gradient(circle, var(--muted) 0%, transparent 70%)",
+          }}
+        />
+        <div
+          className="absolute top-2/3 left-1/3 w-64 h-64 rounded-full opacity-15"
+          style={{
+            background:
+              "radial-gradient(circle, var(--accent) 0%, transparent 70%)",
           }}
         />
       </div>
 
       <div className="glass rounded-2xl p-8 w-full max-w-sm animate-[fade-in_0.4s_ease-out] relative z-10">
-        {/* DNA Helix Icon */}
+        {/* Bloom Icon */}
         <div className="text-center mb-6">
-          <div className="text-5xl mb-3">🧬</div>
-          <h1 className="text-2xl font-semibold text-[var(--foreground)]">
+          <div className="flex justify-center mb-3">
+            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-12 h-12">
+              <circle cx="16" cy="13" r="4" fill="var(--primary)" opacity="0.9"/>
+              <ellipse cx="10.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(-30 10.5 15.5)" fill="var(--primary)" opacity="0.6"/>
+              <ellipse cx="21.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(30 21.5 15.5)" fill="var(--primary)" opacity="0.6"/>
+              <ellipse cx="12" cy="20" rx="3.5" ry="4.5" transform="rotate(-60 12 20)" fill="var(--primary)" opacity="0.45"/>
+              <ellipse cx="20" cy="20" rx="3.5" ry="4.5" transform="rotate(60 20 20)" fill="var(--primary)" opacity="0.45"/>
+              <circle cx="16" cy="16" r="2.5" fill="var(--accent)"/>
+              <rect x="15.25" y="20" width="1.5" height="8" rx="0.75" fill="var(--primary)" opacity="0.7"/>
+            </svg>
+          </div>
+          <h1 className="text-2xl font-serif font-semibold text-foreground">
             BloomOne
           </h1>
-          <p className="text-sm text-[var(--muted-foreground)] mt-1">
-            Neoantigen Vaccine Pipeline
+          <p className="text-sm font-serif text-muted-foreground mt-1">
+            Personalized Neoantigen Vaccine Platform
           </p>
         </div>
 
@@ -85,15 +102,15 @@ export function LoginGate({ children }: LoginGateProps) {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
-              className="w-full px-4 py-3 rounded-xl bg-[var(--input)] border border-[var(--border)] 
-                         text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]
-                         focus:outline-none focus:ring-2 focus:ring-[var(--ring)] focus:border-transparent
+              className="w-full px-4 py-3 rounded-xl bg-input border border-border 
+                         text-foreground placeholder:text-muted-foreground
+                         focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent
                          transition-all duration-200"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-[var(--destructive)] animate-[fade-in_0.2s_ease-out]">
+            <p className="text-sm text-destructive animate-[fade-in_0.2s_ease-out]">
               {error}
             </p>
           )}
@@ -102,15 +119,15 @@ export function LoginGate({ children }: LoginGateProps) {
             type="submit"
             disabled={loading || !password}
             className="w-full py-3 px-4 rounded-xl font-medium transition-all duration-200
-                       bg-[var(--primary)] text-[var(--primary-foreground)]
-                       hover:opacity-90 active:scale-[0.98]
+                       bg-accent text-accent-foreground
+                       hover:bg-[#c4613f] active:scale-[0.98]
                        disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {loading ? "Verifying..." : "Enter"}
           </button>
         </form>
 
-        <p className="text-xs text-[var(--muted-foreground)] text-center mt-4">
+        <p className="text-xs text-muted-foreground text-center mt-4">
           Research use only · Not for clinical decisions
         </p>
       </div>

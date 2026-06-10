@@ -1,9 +1,9 @@
 {
   "name": "BloomOne",
   "short_name": "BloomOne",
-  "description": "AI-powered neoantigen vaccine design pipeline",
+  "description": "AI-powered personalized neoantigen vaccine design pipeline",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#1a1a2e",
-  "theme_color": "#22c55e"
+  "background_color": "#FFFDF8",
+  "theme_color": "#485C11"
 }
