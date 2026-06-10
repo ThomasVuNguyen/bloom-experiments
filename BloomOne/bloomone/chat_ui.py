@@ -789,6 +789,7 @@ def create_app(
         try:
             if _vertexai_available and "vertexai" in clients:
                 # Refresh token if needed
+                print(f"[title] Trying Vertex AI ({title_model})...")
                 refreshed = _get_vertexai_client()
                 if refreshed:
                     clients["vertexai"] = refreshed
@@ -800,8 +801,10 @@ def create_app(
                     temperature=0.3,
                 )
                 title = resp.choices[0].message.content.strip().strip('"\'')
+                print(f"[title] Vertex AI success: {title!r}")
             else:
                 # Fallback to OpenRouter with a free model
+                print(f"[title] Vertex AI not available, trying OpenRouter ({model_name})...")
                 resp = clients["openrouter"].chat.completions.create(
                     model=model_name,
                     messages=title_prompt,
@@ -809,8 +812,9 @@ def create_app(
                     temperature=0.3,
                 )
                 title = resp.choices[0].message.content.strip().strip('"\'')
+                print(f"[title] OpenRouter success: {title!r}")
         except Exception as e:
-            print(f"[title] Error generating title: {e}")
+            print(f"[title] LLM title generation failed: {e}")
             # Fall back to first user message truncation
             first_user = next(
                 (m["content"] for m in messages if m.get("role") == "user"),
@@ -824,6 +828,7 @@ def create_app(
                 if len(first_user) > 60
                 else first_user
             )
+            print(f"[title] Fallback to truncation: {title!r}")
 
         # Ensure title isn't too long
         if len(title) > 80:

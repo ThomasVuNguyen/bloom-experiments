@@ -6,14 +6,27 @@ const BLOOMONE_API_KEY = process.env.BLOOMONE_API_KEY || "";
 /**
  * POST /api/chat/title
  *
- * Proxies title-generation requests to the Modal backend.
- * Uses Gemini 2.5 Flash Lite for fast, cheap title generation.
+ * Generates a short chat title.
+ *
+ * Strategy:
+ * 1. Try the Modal backend's /v1/chat/title (uses Vertex AI Gemini Flash Lite)
+ * 2. If that fails/times out, fall back to truncating the first user message
  */
 export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json();
+  const body = await request.json();
+  const messages: Array<{ role: string; content: string }> =
+    body.messages || [];
 
-    console.log("[title] Requesting title generation from backend...");
+  if (!messages.length) {
+    return NextResponse.json({ title: "New Chat" });
+  }
+
+  // Try Modal backend first
+  try {
+    console.log("[title] Requesting title from Modal backend...");
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
 
     const response = await fetch(`${BLOOMONE_API_URL}/v1/chat/title`, {
       method: "POST",
@@ -24,26 +37,46 @@ export async function POST(request: NextRequest) {
         }),
       },
       body: JSON.stringify(body),
-      // Modal cold starts can take 20s+, give it 45s
-      signal: AbortSignal.timeout(45_000),
+      signal: controller.signal,
     });
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "unknown");
-      console.error(
-        `[title] Backend returned ${response.status}: ${errText}`,
-      );
-      return NextResponse.json({ title: "New Chat" }, { status: 200 });
-    }
+    clearTimeout(timeout);
 
-    const data = await response.json();
-    console.log(`[title] Generated: "${data.title}"`);
-    return NextResponse.json(data);
+    if (response.ok) {
+      const data = await response.json();
+      const title = data.title || "";
+
+      // Check if the backend returned a REAL title (not just the user message)
+      const firstUserMsg = messages
+        .find((m) => m.role === "user")
+        ?.content?.replace(/\[.*?\]\s*/g, "")
+        .trim();
+
+      if (title && title !== "New Chat" && title !== firstUserMsg) {
+        console.log(`[title] Modal returned AI title: "${title}"`);
+        return NextResponse.json({ title });
+      }
+      console.log(
+        `[title] Modal returned echo/fallback: "${title}", generating locally...`,
+      );
+    } else {
+      console.log(
+        `[title] Modal returned ${response.status}, generating locally...`,
+      );
+    }
   } catch (error) {
-    const msg =
-      error instanceof Error ? error.message : "Unknown error";
-    console.error(`[title] Failed: ${msg}`);
-    // If title generation fails, return a fallback
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.log(`[title] Modal failed (${msg}), generating locally...`);
+  }
+
+  // Local fallback: truncate first user message
+  const firstUser = messages.find((m) => m.role === "user");
+  if (!firstUser) {
     return NextResponse.json({ title: "New Chat" });
   }
+
+  const text = firstUser.content.replace(/\[.*?\]\s*/g, "").trim();
+  const title = text.length > 40 ? text.slice(0, 37) + "..." : text;
+  console.log(`[title] Local fallback: "${title}"`);
+  return NextResponse.json({ title });
 }
