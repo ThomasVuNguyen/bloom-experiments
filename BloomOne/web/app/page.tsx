@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { LoginGate } from "@/components/login-gate";
 import { Sidebar } from "@/components/sidebar";
 import { Chat } from "@/components/chat";
@@ -21,10 +21,25 @@ function ChatApp() {
     setActiveChatId,
   } = useChats();
 
+  // Pre-warm the Modal backend on page load (fire-and-forget).
+  // This wakes the container from cold sleep so the first chat
+  // message doesn't hit a ~20s cold start.
+  useEffect(() => {
+    fetch("/api/warmup").catch(() => {
+      // Silent fail — warmup is best-effort
+    });
+  }, []);
+
+
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     null,
   );
+
+  // Ref to synchronously track a just-created chat ID within the same render
+  // cycle, preventing duplicate chat creation when handleMessagesChange is
+  // called multiple times before React re-renders (user msg + assistant msg).
+  const pendingChatIdRef = useRef<string | null>(null);
 
   // Per-chat LLM history (includes tool calls, not persisted to save space)
   const [llmHistoryMap, setLlmHistoryMap] = useState<
@@ -38,9 +53,10 @@ function ChatApp() {
 
   const handleMessagesChange = useCallback(
     (messages: ChatMessage[]) => {
-      let chatId = activeChatId;
+      let chatId = activeChatId || pendingChatIdRef.current;
       if (!chatId) {
         chatId = createChat();
+        pendingChatIdRef.current = chatId;
       }
       updateChat(chatId, messages);
     },
@@ -49,22 +65,25 @@ function ChatApp() {
 
   const handleLlmHistoryChange = useCallback(
     (history: ChatMessage[]) => {
-      if (!activeChatId) return;
+      const chatId = activeChatId || pendingChatIdRef.current;
+      if (!chatId) return;
       setLlmHistoryMap((prev) => ({
         ...prev,
-        [activeChatId]: history,
+        [chatId]: history,
       }));
     },
     [activeChatId],
   );
 
   const handleNewChat = useCallback(() => {
+    pendingChatIdRef.current = null;
     createChat();
     setSidebarOpen(false);
   }, [createChat]);
 
   const handleSelectChat = useCallback(
     (id: string) => {
+      pendingChatIdRef.current = null;
       selectChat(id);
       setSelectedPatientId(null); // Close patient panel when switching chats
     },
