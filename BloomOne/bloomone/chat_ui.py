@@ -784,7 +784,7 @@ def create_app(
 
         # Try Vertex AI (Flash Lite) first, fall back to OpenRouter
         title = "New Chat"
-        title_model = "gemini-2.5-flash-lite"
+        title_model = "google/gemini-2.5-flash-lite"
 
         try:
             if _vertexai_available and "vertexai" in clients:
