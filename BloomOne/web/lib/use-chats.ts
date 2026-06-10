@@ -107,7 +107,7 @@ export function useChats() {
         const updated = prev.map((c) => {
           if (c.id !== chatId) return c;
 
-          // Use instant fallback title first
+          // Use instant fallback title first — but preserve AI-generated titles
           const instantTitle = c.customTitle
             ? c.title
             : deriveTitle(messages);
@@ -139,7 +139,7 @@ export function useChats() {
                 setChats((latest) =>
                   latest.map((ch) => {
                     if (ch.id !== chatId || ch.customTitle) return ch;
-                    const titled = { ...ch, title: aiTitle };
+                    const titled = { ...ch, title: aiTitle, customTitle: true };
                     debouncedSave(titled);
                     return titled;
                   }),
