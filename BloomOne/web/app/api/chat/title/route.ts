@@ -13,6 +13,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    console.log("[title] Requesting title generation from backend...");
+
     const response = await fetch(`${BLOOMONE_API_URL}/v1/chat/title`, {
       method: "POST",
       headers: {
@@ -22,19 +24,25 @@ export async function POST(request: NextRequest) {
         }),
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000), // 15s timeout
+      // Modal cold starts can take 20s+, give it 45s
+      signal: AbortSignal.timeout(45_000),
     });
 
     if (!response.ok) {
-      return NextResponse.json(
-        { title: "New Chat" },
-        { status: 200 },
+      const errText = await response.text().catch(() => "unknown");
+      console.error(
+        `[title] Backend returned ${response.status}: ${errText}`,
       );
+      return NextResponse.json({ title: "New Chat" }, { status: 200 });
     }
 
     const data = await response.json();
+    console.log(`[title] Generated: "${data.title}"`);
     return NextResponse.json(data);
-  } catch {
+  } catch (error) {
+    const msg =
+      error instanceof Error ? error.message : "Unknown error";
+    console.error(`[title] Failed: ${msg}`);
     // If title generation fails, return a fallback
     return NextResponse.json({ title: "New Chat" });
   }
