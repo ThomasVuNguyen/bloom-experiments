@@ -58,6 +58,40 @@
   --ring: #485C11;
   --pop: #9EDA1D;
   --warm-cta: #D97757;
+
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.12);
+  --pre-bg: #F4F1EB;
+}
+
+/* Dark Theme — same brand, inverted for comfort */
+.dark {
+  --background: #111a0d;
+  --foreground: #e8ece4;
+  --card: #1a2414;
+  --card-foreground: #e8ece4;
+  --primary: #7a9e2a;
+  --primary-foreground: #111a0d;
+  --secondary: #1f2d18;
+  --secondary-foreground: #c4ccbc;
+  --muted: #243019;
+  --muted-foreground: #8a9680;
+  --accent: #D97757;
+  --accent-foreground: #111a0d;
+  --destructive: #e04d2e;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: #1f2d18;
+  --ring: #7a9e2a;
+  --pop: #9EDA1D;
+  --warm-cta: #D97757;
+
+  --glass-bg: rgba(26, 36, 20, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-shadow: 0 1px 3px rgba(0, 0, 0, 0.2), 0 4px 12px rgba(0, 0, 0, 0.15);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+  --pre-bg: #1f2d18;
 }
 
 @keyframes fade-in {
@@ -99,7 +133,7 @@
 /* Smooth scrollbar */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.12) transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 body {
@@ -150,7 +184,7 @@ body {
 }
 
 .markdown-body pre {
-  background: #F4F1EB;
+  background: var(--pre-bg);
   border: 1px solid var(--border);
   padding: 1em;
   border-radius: 12px;
@@ -202,18 +236,18 @@ body {
   color: var(--muted-foreground);
 }
 
-/* Glassmorphism utility — warm light variant */
+/* Glassmorphism utility — adapts to light/dark via CSS vars */
 .glass {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--glass-bg);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.03);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
 }
 
-/* Warm card shadow (used instead of Anthropic's no-shadow for depth) */
+/* Warm card shadow */
 .card-elevated {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04),
               0 4px 16px rgba(0, 0, 0, 0.04),
-              inset 0 1px 0 rgba(255, 255, 255, 0.8);
+              inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }

@@ -40,7 +40,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <body
         className={`${dmSans.variable} ${dmSerif.variable} ${jetbrainsMono.variable} antialiased min-h-screen`}
       >

@@ -4,6 +4,6 @@
   "description": "AI-powered personalized neoantigen vaccine design pipeline",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FFFDF8",
-  "theme_color": "#485C11"
+  "background_color": "#111a0d",
+  "theme_color": "#7a9e2a"
 }

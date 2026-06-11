@@ -615,7 +615,7 @@ export function Chat({
         </form>
 
         <p className="text-[10px] text-muted-foreground text-center mt-2">
-          ⚠️ All outputs are for research use only · Not validated for clinical
+          All outputs are for research use only · Not validated for clinical
           decisions
         </p>
       </div>
