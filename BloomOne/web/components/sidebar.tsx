@@ -195,10 +195,10 @@ export function Sidebar({
                        transition-colors"
             title="Close sidebar"
           >
-            {/* CSS sidebar panel icon */}
-            <span className="inline-flex w-[16px] h-[14px] border border-current rounded-[2px] overflow-hidden">
-              <span className="w-[5px] h-full border-r border-current" />
-            </span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
           </button>
 
           {/* New chat compose button */}
@@ -209,14 +209,10 @@ export function Sidebar({
                        transition-colors"
             title="New chat"
           >
-            {/* CSS compose/pencil icon */}
-            <span className="relative inline-flex w-[14px] h-[14px]">
-              <span className="absolute inset-0 border border-current rounded-[3px]" />
-              <span className="absolute -top-[1px] -right-[1px] w-[7px] h-[7px] border-b border-l border-current
-                             rotate-[-0deg] rounded-bl-[1px]"
-                    style={{ background: 'var(--card)' }} />
-              <span className="absolute top-[1px] right-[1px] w-[1px] h-[6px] bg-current rotate-[-45deg] origin-bottom" />
-            </span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 20h9" />
+              <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+            </svg>
           </button>
         </div>
 

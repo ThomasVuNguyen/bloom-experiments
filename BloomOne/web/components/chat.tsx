@@ -253,10 +253,10 @@ export function Chat({
                          hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
               title="Open sidebar"
             >
-              {/* CSS sidebar panel icon — matches the one in sidebar */}
-              <span className="inline-flex w-[16px] h-[14px] border border-current rounded-[2px] overflow-hidden">
-                <span className="w-[5px] h-full border-r border-current" />
-              </span>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+              </svg>
             </button>
           )}
           <h1 className="text-base font-semibold text-foreground font-serif truncate">
