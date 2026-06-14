@@ -132,6 +132,8 @@ function ChatApp() {
         onLlmHistoryChange={handleLlmHistoryChange}
         onSidebarToggle={() => setSidebarOpen(true)}
         chatTitle={activeChat?.title || null}
+        isSidebarCollapsed={sidebarCollapsed}
+        onExpandSidebar={() => setSidebarCollapsed(false)}
       />
 
       {/* Patient detail panel */}

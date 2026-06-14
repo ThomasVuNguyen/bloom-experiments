@@ -182,27 +182,11 @@ export function Sidebar({
         className={`fixed lg:static inset-y-0 left-0 z-50
                    bg-card border-r border-border
                    flex flex-col transition-all duration-300 ease-in-out
-                   ${isCollapsed ? "w-0 lg:w-12 overflow-hidden" : "w-72"}
+                   ${isCollapsed ? "lg:w-0 lg:border-r-0 lg:overflow-hidden" : "w-72"}
                    ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        {/* Collapsed state — just a thin expand bar on desktop */}
-        {isCollapsed && (
-          <div className="hidden lg:flex flex-col items-center py-3 w-12">
-            <button
-              onClick={onToggleCollapse}
-              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-1 py-2 rounded"
-              title="Expand sidebar"
-            >
-              »
-            </button>
-          </div>
-        )}
-
-        {/* Full sidebar content — hidden when collapsed */}
-        {!isCollapsed && (
-          <>
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border min-w-[18rem]">
           <div>
             <span className="text-sm font-serif font-semibold text-foreground">
               BloomOne
@@ -224,10 +208,12 @@ export function Sidebar({
             )}
             <button
               onClick={onToggleCollapse}
-              className="hidden lg:inline-flex text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded hover:bg-secondary"
+              className="hidden lg:inline-flex items-center justify-center w-6 h-6 rounded-md
+                         text-muted-foreground hover:text-foreground hover:bg-secondary
+                         transition-colors"
               title="Collapse sidebar"
             >
-              «
+              <span className="text-[11px] leading-none">—</span>
             </button>
           </div>
         </div>
@@ -297,8 +283,6 @@ export function Sidebar({
               : "Patient records persist across sessions."}
           </p>
         </div>
-          </>
-        )}
       </aside>
     </>
   );

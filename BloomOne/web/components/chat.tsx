@@ -40,6 +40,8 @@ interface ChatProps {
   onLlmHistoryChange: (history: ChatMessage[]) => void;
   onSidebarToggle: () => void;
   chatTitle: string | null;
+  isSidebarCollapsed: boolean;
+  onExpandSidebar: () => void;
 }
 
 export function Chat({
@@ -49,6 +51,8 @@ export function Chat({
   onLlmHistoryChange,
   onSidebarToggle,
   chatTitle,
+  isSidebarCollapsed,
+  onExpandSidebar,
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -233,7 +237,7 @@ export function Chat({
     <div className="flex flex-col h-screen flex-1 min-w-0">
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-3 bg-card/80 backdrop-blur-sm border-b border-border">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {/* Mobile sidebar toggle */}
           <button
             onClick={onSidebarToggle}
@@ -241,6 +245,17 @@ export function Chat({
           >
             Menu
           </button>
+          {/* Desktop sidebar expand — only visible when sidebar is collapsed */}
+          {isSidebarCollapsed && (
+            <button
+              onClick={onExpandSidebar}
+              className="hidden lg:inline-flex items-center justify-center w-7 h-7 rounded-lg
+                         hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
+              title="Open sidebar"
+            >
+              <span className="text-sm leading-none">≡</span>
+            </button>
+          )}
           <h1 className="text-base font-semibold text-foreground font-serif truncate">
             {chatTitle || "New Chat"}
           </h1>
