@@ -3,24 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import { uploadFile } from "@/lib/api";
 
-/** Inline SVG paperclip icon */
-function PaperclipIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      fill="none"
-      viewBox="0 0 24 24"
-      stroke="currentColor"
-      strokeWidth={2}
-    >
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-      />
-    </svg>
-  );
-}
+
 
 interface FileUploadProps {
   onFileUploaded: (fileInfo: { id: string; path: string; filename: string }) => void;
@@ -78,7 +61,6 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
   if (uploadedFiles.length > 0) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-primary/5 border border-primary/20 text-sm">
-        <PaperclipIcon className="w-4 h-4 text-primary flex-shrink-0" />
         <span className="text-primary truncate max-w-[200px]">
           {uploadedFiles.length === 1
             ? uploadedFiles[0]
@@ -86,11 +68,9 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
         </span>
         <button
           onClick={() => setUploadedFiles([])}
-          className="text-muted-foreground hover:text-destructive ml-auto transition-colors"
+          className="text-xs text-muted-foreground hover:text-destructive ml-auto transition-colors"
         >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          Remove
         </button>
       </div>
     );
@@ -129,7 +109,7 @@ export function FileUpload({ onFileUploaded, disabled }: FileUploadProps) {
         {uploading ? (
           <div className="w-4 h-4 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
         ) : (
-          <PaperclipIcon />
+          <span className="text-xs">+</span>
         )}
         <span className="hidden sm:inline">
           {uploading ? (uploadProgress || "Uploading...") : "Attach file"}

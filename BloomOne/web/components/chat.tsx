@@ -30,65 +30,7 @@ const PROVIDER_COLORS: Record<string, string> = {
   cloudrift: "#6a9bcc",
 };
 
-/** Reusable Bloom SVG icon */
-function BloomIcon({ className = "w-7 h-7" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
-      <circle cx="16" cy="13" r="4" fill="var(--primary)" opacity="0.9" />
-      <ellipse
-        cx="10.5"
-        cy="15.5"
-        rx="3.5"
-        ry="4.5"
-        transform="rotate(-30 10.5 15.5)"
-        fill="var(--primary)"
-        opacity="0.6"
-      />
-      <ellipse
-        cx="21.5"
-        cy="15.5"
-        rx="3.5"
-        ry="4.5"
-        transform="rotate(30 21.5 15.5)"
-        fill="var(--primary)"
-        opacity="0.6"
-      />
-      <ellipse
-        cx="12"
-        cy="20"
-        rx="3.5"
-        ry="4.5"
-        transform="rotate(-60 12 20)"
-        fill="var(--primary)"
-        opacity="0.45"
-      />
-      <ellipse
-        cx="20"
-        cy="20"
-        rx="3.5"
-        ry="4.5"
-        transform="rotate(60 20 20)"
-        fill="var(--primary)"
-        opacity="0.45"
-      />
-      <circle cx="16" cy="16" r="2.5" fill="var(--accent)" />
-      <rect
-        x="15.25"
-        y="20"
-        width="1.5"
-        height="8"
-        rx="0.75"
-        fill="var(--primary)"
-        opacity="0.7"
-      />
-    </svg>
-  );
-}
+
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -293,23 +235,10 @@ export function Chat({
           {/* Mobile sidebar toggle */}
           <button
             onClick={onSidebarToggle}
-            className="p-1.5 rounded-lg hover:bg-secondary transition-colors lg:hidden"
+            className="px-2 py-1 rounded-lg hover:bg-secondary transition-colors lg:hidden text-foreground text-sm font-medium"
           >
-            <svg
-              className="w-5 h-5 text-foreground"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
-              />
-            </svg>
+            Menu
           </button>
-          <BloomIcon className="w-7 h-7" />
           <div>
             <h1 className="text-base font-semibold text-foreground font-serif">
               BloomOne
@@ -342,21 +271,9 @@ export function Chat({
               <span className="max-w-[120px] truncate hidden sm:inline">
                 {shortModelName}
               </span>
-              <svg
-                className={`w-3 h-3 transition-transform duration-200 ${
+              <span className={`text-[10px] transition-transform duration-200 inline-block ${
                   modelPickerOpen ? "rotate-180" : ""
-                }`}
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M19.5 8.25l-7.5 7.5-7.5-7.5"
-                />
-              </svg>
+                }`}>▾</span>
             </button>
 
             {/* Dropdown */}
@@ -418,19 +335,7 @@ export function Chat({
                           </span>
                         </div>
                         {isActive && (
-                          <svg
-                            className="w-4 h-4 text-primary flex-shrink-0"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M4.5 12.75l6 6 9-13.5"
-                            />
-                          </svg>
+                          <span className="text-primary text-sm flex-shrink-0">✓</span>
                         )}
                       </button>
                     );
@@ -458,15 +363,8 @@ export function Chat({
           <div className="flex flex-col items-center justify-center h-full text-center animate-[fade-in_0.5s_ease-out]">
             {/* Ambient glow */}
             <div className="relative mb-8">
-              <div
-                className="absolute inset-0 w-24 h-24 rounded-full mx-auto animate-[bloom-grow_2.5s_ease-in-out_infinite]"
-                style={{
-                  background:
-                    "radial-gradient(circle, rgba(72,92,17,0.12) 0%, transparent 70%)",
-                }}
-              />
               <div className="relative z-10 flex items-center justify-center">
-                <BloomIcon className="w-16 h-16" />
+                <span className="text-4xl font-serif font-bold text-primary">B1</span>
               </div>
             </div>
 
@@ -513,16 +411,8 @@ export function Chat({
             ) : (
               statusUpdates.length === 0 && (
                 <div className="flex gap-3 animate-[fade-in_0.3s_ease-out]">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-accent text-sm flex-shrink-0 p-1.5">
-                    <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
-                      <circle cx="16" cy="13" r="4" fill="#FFFDF8" opacity="0.9"/>
-                      <ellipse cx="10.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(-30 10.5 15.5)" fill="#FFFDF8" opacity="0.6"/>
-                      <ellipse cx="21.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(30 21.5 15.5)" fill="#FFFDF8" opacity="0.6"/>
-                      <ellipse cx="12" cy="20" rx="3.5" ry="4.5" transform="rotate(-60 12 20)" fill="#FFFDF8" opacity="0.45"/>
-                      <ellipse cx="20" cy="20" rx="3.5" ry="4.5" transform="rotate(60 20 20)" fill="#FFFDF8" opacity="0.45"/>
-                      <circle cx="16" cy="16" r="2.5" fill="#FFFDF8"/>
-                      <rect x="15.25" y="20" width="1.5" height="8" rx="0.75" fill="#FFFDF8" opacity="0.7"/>
-                    </svg>
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-accent text-sm flex-shrink-0 font-serif font-bold text-accent-foreground">
+                    B
                   </div>
                   <div className="glass rounded-2xl px-4 py-3 max-w-xs">
                     <div className="flex items-center gap-2.5">
@@ -598,19 +488,7 @@ export function Chat({
                      hover:bg-[#c4613f] active:scale-95
                      disabled:opacity-30 disabled:cursor-not-allowed"
           >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5"
-              />
-            </svg>
+            <span className="text-sm font-medium">Send</span>
           </button>
         </form>
 

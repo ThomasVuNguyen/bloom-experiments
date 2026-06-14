@@ -75,17 +75,6 @@ export function LoginGate({ children }: LoginGateProps) {
       <div className="glass rounded-2xl p-8 w-full max-w-sm animate-[fade-in_0.4s_ease-out] relative z-10">
         {/* Bloom Icon */}
         <div className="text-center mb-6">
-          <div className="flex justify-center mb-3">
-            <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-12 h-12">
-              <circle cx="16" cy="13" r="4" fill="var(--primary)" opacity="0.9"/>
-              <ellipse cx="10.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(-30 10.5 15.5)" fill="var(--primary)" opacity="0.6"/>
-              <ellipse cx="21.5" cy="15.5" rx="3.5" ry="4.5" transform="rotate(30 21.5 15.5)" fill="var(--primary)" opacity="0.6"/>
-              <ellipse cx="12" cy="20" rx="3.5" ry="4.5" transform="rotate(-60 12 20)" fill="var(--primary)" opacity="0.45"/>
-              <ellipse cx="20" cy="20" rx="3.5" ry="4.5" transform="rotate(60 20 20)" fill="var(--primary)" opacity="0.45"/>
-              <circle cx="16" cy="16" r="2.5" fill="var(--accent)"/>
-              <rect x="15.25" y="20" width="1.5" height="8" rx="0.75" fill="var(--primary)" opacity="0.7"/>
-            </svg>
-          </div>
           <h1 className="text-2xl font-serif font-semibold text-foreground">
             BloomOne
           </h1>

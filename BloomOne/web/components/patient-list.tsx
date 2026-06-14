@@ -18,30 +18,7 @@ function formatDate(dateStr: string | null): string {
   });
 }
 
-/** Small bloom icon for pipeline dots */
-function SmallBloomIcon() {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" className="w-3 h-3 inline-block">
-      <circle cx="8" cy="7" r="2.5" fill="var(--primary)" opacity="0.9" />
-      <circle cx="8" cy="8" r="1.2" fill="var(--accent)" />
-      <ellipse cx="5.5" cy="8.5" rx="2" ry="2.5" transform="rotate(-30 5.5 8.5)" fill="var(--primary)" opacity="0.5" />
-      <ellipse cx="10.5" cy="8.5" rx="2" ry="2.5" transform="rotate(30 10.5 8.5)" fill="var(--primary)" opacity="0.5" />
-    </svg>
-  );
-}
 
-/** Small paperclip icon for file count */
-function SmallPaperclipIcon() {
-  return (
-    <svg className="w-2.5 h-2.5 inline-block" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-      />
-    </svg>
-  );
-}
 
 /** Compact pipeline progress dots (stages 1-7) */
 function PipelineDots({ runCount }: { runCount: number }) {
@@ -51,7 +28,7 @@ function PipelineDots({ runCount }: { runCount: number }) {
       className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary"
       title={`${runCount} pipeline run${runCount > 1 ? "s" : ""}`}
     >
-      <SmallBloomIcon /> {runCount}
+      {runCount} run{runCount > 1 ? "s" : ""}
     </span>
   );
 }
@@ -89,7 +66,7 @@ function PatientCard({
                 className="inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full bg-muted/50 text-muted-foreground"
                 title={`${patient.fileCount} file${patient.fileCount > 1 ? "s" : ""}`}
               >
-                <SmallPaperclipIcon /> {patient.fileCount}
+                {patient.fileCount} file{patient.fileCount > 1 ? "s" : ""}
               </span>
             )}
             <PipelineDots runCount={patient.runCount} />
@@ -110,19 +87,7 @@ function PatientCard({
           className="flex-shrink-0 opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity p-0.5 rounded text-muted-foreground hover:text-destructive hover:bg-destructive/10"
           title="Delete patient"
         >
-          <svg
-            className="w-3.5 h-3.5"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M6 18L18 6M6 6l12 12"
-            />
-          </svg>
+          <span className="text-[10px]">Del</span>
         </button>
       </div>
       <span className="text-[10px] text-muted-foreground mt-0.5 block">

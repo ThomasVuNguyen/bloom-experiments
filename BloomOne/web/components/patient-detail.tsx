@@ -38,95 +38,18 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
 }
 
-/** SVG icons for file types */
-function FileTypeIcon({ type }: { type: string }) {
-  const iconClass = "w-4 h-4 flex-shrink-0";
-
-  if (type === "image") {
-    return (
-      <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="var(--primary)" strokeWidth={1.5}>
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <circle cx="8.5" cy="8.5" r="1.5" fill="var(--accent)" stroke="none" />
-        <path d="M21 15l-5-5L5 21" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-
-  if (type === "pdf") {
-    return (
-      <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="var(--primary)" strokeWidth={1.5}>
-        <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" strokeLinecap="round" strokeLinejoin="round" />
-        <polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" />
-        <line x1="9" y1="13" x2="15" y2="13" strokeLinecap="round" />
-        <line x1="9" y1="17" x2="13" y2="17" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  if (type === "genomic") {
-    return (
-      <svg className={iconClass} viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth={1.5}>
-        <path d="M12 3c-3 2.5-3 6.5 0 9s3 6.5 0 9" strokeLinecap="round" />
-        <path d="M12 3c3 2.5 3 6.5 0 9s-3 6.5 0 9" strokeLinecap="round" />
-        <line x1="8" y1="7" x2="16" y2="7" strokeLinecap="round" />
-        <line x1="7" y1="12" x2="17" y2="12" strokeLinecap="round" />
-        <line x1="8" y1="17" x2="16" y2="17" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  if (type === "dicom") {
-    return (
-      <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="var(--primary)" strokeWidth={1.5}>
-        <rect x="3" y="3" width="18" height="18" rx="2" />
-        <path d="M12 8v8M8 12h8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-
-  // document / default
+/** Text label for file types */
+function FileTypeLabel({ type }: { type: string }) {
+  const labels: Record<string, string> = {
+    image: "IMG",
+    pdf: "PDF",
+    genomic: "GEN",
+    dicom: "DCM",
+  };
   return (
-    <svg className={iconClass} fill="none" viewBox="0 0 24 24" stroke="var(--primary)" strokeWidth={1.5}>
-      <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="9" y1="13" x2="15" y2="13" strokeLinecap="round" />
-      <line x1="9" y1="17" x2="15" y2="17" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** SVG paperclip icon */
-function PaperclipIcon({ className = "w-4 h-4" }: { className?: string }) {
-  return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
-      />
-    </svg>
-  );
-}
-
-/** SVG icon for agent notes (circuit/bot) */
-function AgentIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-      <rect x="2" y="3" width="12" height="10" rx="2" fill="var(--primary)" opacity="0.15" stroke="var(--primary)" strokeWidth="1" />
-      <circle cx="6" cy="8" r="1.2" fill="var(--primary)" />
-      <circle cx="10" cy="8" r="1.2" fill="var(--primary)" />
-      <line x1="5" y1="11" x2="11" y2="11" stroke="var(--primary)" strokeWidth="0.8" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-/** SVG icon for user notes */
-function UserIcon() {
-  return (
-    <svg className="w-3.5 h-3.5" viewBox="0 0 16 16" fill="none">
-      <circle cx="8" cy="5.5" r="2.5" fill="var(--primary)" opacity="0.2" stroke="var(--primary)" strokeWidth="1" />
-      <path d="M3 14c0-2.76 2.24-5 5-5s5 2.24 5 5" fill="var(--primary)" opacity="0.15" stroke="var(--primary)" strokeWidth="1" strokeLinecap="round" />
-    </svg>
+    <span className="text-[10px] font-mono font-medium text-primary bg-primary/10 px-1.5 py-0.5 rounded flex-shrink-0">
+      {labels[type] || "DOC"}
+    </span>
   );
 }
 
@@ -156,15 +79,7 @@ function Section({
             <span className="ml-1.5 text-[10px] font-normal font-sans">({count})</span>
           )}
         </span>
-        <svg
-          className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        <span className={`text-xs text-muted-foreground transition-transform inline-block ${open ? "rotate-180" : ""}`}>▾</span>
       </button>
       {open && <div className="px-4 pb-3">{children}</div>}
     </div>
@@ -268,15 +183,7 @@ export function PatientDetailPanel({
           className="p-1.5 rounded-lg hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
           title="Close"
         >
-          <svg
-            className="w-4 h-4"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
+          <span className="text-sm">Close</span>
         </button>
       </div>
 
@@ -324,7 +231,7 @@ export function PatientDetailPanel({
                 key={file.id}
                 className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-secondary/40 text-xs"
               >
-                <FileTypeIcon type={file.fileType} />
+                <FileTypeLabel type={file.fileType} />
                 <div className="flex-1 min-w-0">
                   <p className="text-foreground truncate font-medium">
                     {file.filename}
@@ -359,7 +266,7 @@ export function PatientDetailPanel({
                 </>
               ) : (
                 <>
-                  <PaperclipIcon className="w-3.5 h-3.5" /> Attach file
+                  Attach file
                 </>
               )}
             </button>
@@ -402,7 +309,7 @@ export function PatientDetailPanel({
                 className="px-2.5 py-2 rounded-lg bg-secondary/30 text-xs"
               >
                 <div className="flex items-center gap-1.5 mb-0.5">
-                  {note.source === "agent" ? <AgentIcon /> : <UserIcon />}
+                  <span className="text-[10px] font-medium text-primary">{note.source === "agent" ? "Agent" : "You"}</span>
                   <span className="text-[10px] text-muted-foreground">
                     {formatDateTime(note.createdAt)}
                   </span>

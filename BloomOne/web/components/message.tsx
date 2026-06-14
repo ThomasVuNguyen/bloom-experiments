@@ -21,66 +21,13 @@ export function Message({ message, isStreaming }: MessageProps) {
         isUser ? "justify-end" : "justify-start"
       }`}
     >
-      {/* Assistant avatar — Bloom icon on terra cotta */}
+      {/* Assistant avatar */}
       {!isUser && (
         <div
           className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-                     bg-accent p-1.5"
+                     bg-accent text-accent-foreground text-sm font-serif font-bold"
         >
-          <svg
-            viewBox="0 0 32 32"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="w-full h-full"
-          >
-            <circle cx="16" cy="13" r="4" fill="#FFFDF8" opacity="0.9" />
-            <ellipse
-              cx="10.5"
-              cy="15.5"
-              rx="3.5"
-              ry="4.5"
-              transform="rotate(-30 10.5 15.5)"
-              fill="#FFFDF8"
-              opacity="0.6"
-            />
-            <ellipse
-              cx="21.5"
-              cy="15.5"
-              rx="3.5"
-              ry="4.5"
-              transform="rotate(30 21.5 15.5)"
-              fill="#FFFDF8"
-              opacity="0.6"
-            />
-            <ellipse
-              cx="12"
-              cy="20"
-              rx="3.5"
-              ry="4.5"
-              transform="rotate(-60 12 20)"
-              fill="#FFFDF8"
-              opacity="0.45"
-            />
-            <ellipse
-              cx="20"
-              cy="20"
-              rx="3.5"
-              ry="4.5"
-              transform="rotate(60 20 20)"
-              fill="#FFFDF8"
-              opacity="0.45"
-            />
-            <circle cx="16" cy="16" r="2.5" fill="#FFFDF8" />
-            <rect
-              x="15.25"
-              y="20"
-              width="1.5"
-              height="8"
-              rx="0.75"
-              fill="#FFFDF8"
-              opacity="0.7"
-            />
-          </svg>
+          B
         </div>
       )}
 
@@ -170,26 +117,13 @@ export function Message({ message, isStreaming }: MessageProps) {
         )}
       </div>
 
-      {/* User avatar — person silhouette on olive green */}
+      {/* User avatar */}
       {isUser && (
         <div
           className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center
-                     bg-primary p-1.5"
+                     bg-primary text-primary-foreground text-sm font-bold"
         >
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            className="w-full h-full"
-          >
-            <circle cx="12" cy="8" r="4" fill="#FFFDF8" />
-            <path
-              d="M4 20c0-3.314 3.582-6 8-6s8 2.686 8 6"
-              stroke="#FFFDF8"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
+          U
         </div>
       )}
     </div>

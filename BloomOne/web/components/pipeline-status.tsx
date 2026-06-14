@@ -2,19 +2,16 @@
 
 const STAGE_LABELS = ["Ingest", "Mutate", "Peptide", "Bind", "Safety", "Rank", "Construct"];
 
-/** Small bloom-petal SVG representing a growth stage */
-function StageIcon({ status }: { status: "completed" | "active" | "pending" | "error" }) {
-  const fills: Record<string, string> = {
-    completed: "var(--primary)",
-    active: "var(--pop)",
-    pending: "var(--muted)",
-    error: "var(--destructive)",
+/** Simple dot representing a growth stage */
+function StageDot({ status }: { status: "completed" | "active" | "pending" | "error" }) {
+  const bgClass: Record<string, string> = {
+    completed: "bg-primary",
+    active: "bg-pop",
+    pending: "bg-muted opacity-50",
+    error: "bg-destructive",
   };
   return (
-    <svg viewBox="0 0 16 16" fill="none" className="w-3.5 h-3.5 flex-shrink-0">
-      <circle cx="8" cy="8" r="6" fill={fills[status]} opacity={status === "pending" ? 0.5 : 0.9} />
-      <circle cx="8" cy="8" r="2.5" fill={status === "active" ? "var(--primary)" : "var(--background)"} opacity={0.7} />
-    </svg>
+    <div className={`w-3 h-3 rounded-full flex-shrink-0 ${bgClass[status]}`} />
   );
 }
 
@@ -69,7 +66,7 @@ export function PipelineStatus({ updates, isActive }: PipelineStatusProps) {
           return (
             <div key={i} className="flex flex-col items-center gap-0.5 flex-1 min-w-0">
               <div className={status === "active" ? "animate-[pulse-glow_2.5s_ease-in-out_infinite]" : ""}>
-                <StageIcon status={status} />
+                <StageDot status={status} />
               </div>
               <span
                 className={`text-[8px] leading-tight truncate w-full text-center ${
