@@ -15,6 +15,8 @@ interface SidebarProps {
   onClose: () => void;
   onSelectPatient: (id: string) => void;
   selectedPatientId: string | null;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
 }
 
 function formatTime(ts: number): string {
@@ -161,6 +163,8 @@ export function Sidebar({
   onClose,
   onSelectPatient,
   selectedPatientId,
+  isCollapsed,
+  onToggleCollapse,
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<"chats" | "patients">("chats");
 
@@ -175,26 +179,57 @@ export function Sidebar({
       )}
 
       <aside
-        className={`fixed lg:static inset-y-0 left-0 z-50 w-72 
+        className={`fixed lg:static inset-y-0 left-0 z-50
                    bg-card border-r border-border
-                   flex flex-col transition-transform duration-300 ease-in-out
+                   flex flex-col transition-all duration-300 ease-in-out
+                   ${isCollapsed ? "w-0 lg:w-12 overflow-hidden" : "w-72"}
                    ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
+        {/* Collapsed state — just a thin expand bar on desktop */}
+        {isCollapsed && (
+          <div className="hidden lg:flex flex-col items-center py-3 w-12">
+            <button
+              onClick={onToggleCollapse}
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors px-1 py-2 rounded"
+              title="Expand sidebar"
+            >
+              »
+            </button>
+          </div>
+        )}
+
+        {/* Full sidebar content — hidden when collapsed */}
+        {!isCollapsed && (
+          <>
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-border">
-          <span className="text-sm font-serif font-semibold text-foreground">
-            BloomOne
-          </span>
-          {activeTab === "chats" && (
+          <div>
+            <span className="text-sm font-serif font-semibold text-foreground">
+              BloomOne
+            </span>
+            <p className="text-[10px] text-muted-foreground">
+              Neoantigen Vaccine Design
+            </p>
+          </div>
+          <div className="flex items-center gap-1.5">
+            {activeTab === "chats" && (
+              <button
+                onClick={onNewChat}
+                className="px-2 py-1 rounded-lg border border-primary text-primary text-xs font-medium
+                           hover:bg-primary hover:text-primary-foreground transition-colors"
+                title="New chat"
+              >
+                + New
+              </button>
+            )}
             <button
-              onClick={onNewChat}
-              className="px-2 py-1 rounded-lg border border-primary text-primary text-xs font-medium
-                         hover:bg-primary hover:text-primary-foreground transition-colors"
-              title="New chat"
+              onClick={onToggleCollapse}
+              className="hidden lg:inline-flex text-xs text-muted-foreground hover:text-foreground transition-colors px-1.5 py-1 rounded hover:bg-secondary"
+              title="Collapse sidebar"
             >
-              + New
+              «
             </button>
-          )}
+          </div>
         </div>
 
         {/* Tabs */}
@@ -262,6 +297,8 @@ export function Sidebar({
               : "Patient records persist across sessions."}
           </p>
         </div>
+          </>
+        )}
       </aside>
     </>
   );

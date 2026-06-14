@@ -32,6 +32,7 @@ function ChatApp() {
 
 
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [selectedPatientId, setSelectedPatientId] = useState<string | null>(
     null,
   );
@@ -119,6 +120,8 @@ function ChatApp() {
         onClose={() => setSidebarOpen(false)}
         onSelectPatient={handleSelectPatient}
         selectedPatientId={selectedPatientId}
+        isCollapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
       />
 
       <Chat
@@ -128,6 +131,7 @@ function ChatApp() {
         llmHistory={currentLlmHistory}
         onLlmHistoryChange={handleLlmHistoryChange}
         onSidebarToggle={() => setSidebarOpen(true)}
+        chatTitle={activeChat?.title || null}
       />
 
       {/* Patient detail panel */}

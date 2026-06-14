@@ -39,6 +39,7 @@ interface ChatProps {
   llmHistory: ChatMessage[];
   onLlmHistoryChange: (history: ChatMessage[]) => void;
   onSidebarToggle: () => void;
+  chatTitle: string | null;
 }
 
 export function Chat({
@@ -47,6 +48,7 @@ export function Chat({
   llmHistory,
   onLlmHistoryChange,
   onSidebarToggle,
+  chatTitle,
 }: ChatProps) {
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -80,13 +82,13 @@ export function Chat({
         // Hardcoded fallback if backend is unreachable
         setModels([
           {
-            id: "google/gemma-4-31b-it:free",
+            id: "google/gemini-2.5-flash:free",
             provider: "openrouter",
-            display_name: "gemma-4-31b-it  (OpenRouter)",
+            display_name: "gemini-2.5-flash  (OpenRouter)",
           },
         ]);
-        setSelectedModel("google/gemma-4-31b-it:free");
-        setDefaultModel("google/gemma-4-31b-it:free");
+        setSelectedModel("google/gemini-2.5-flash:free");
+        setDefaultModel("google/gemini-2.5-flash:free");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -239,122 +241,13 @@ export function Chat({
           >
             Menu
           </button>
-          <div>
-            <h1 className="text-base font-semibold text-foreground font-serif">
-              BloomOne
-            </h1>
-            <p className="text-xs text-muted-foreground">
-              Neoantigen Vaccine Design
-            </p>
-          </div>
+          <h1 className="text-base font-semibold text-foreground font-serif truncate">
+            {chatTitle || "New Chat"}
+          </h1>
         </div>
-        <div className="flex items-center gap-2">
-          {/* Model Picker */}
-          <div className="relative" ref={modelPickerRef}>
-            <button
-              id="model-picker-trigger"
-              onClick={() => setModelPickerOpen(!modelPickerOpen)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs
-                       bg-secondary border border-border hover:bg-muted
-                       transition-all duration-200
-                       text-foreground"
-              title="Select model"
-            >
-              <span
-                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-                style={{
-                  background: currentModel
-                    ? PROVIDER_COLORS[currentModel.provider] || "var(--muted-foreground)"
-                    : "var(--muted-foreground)",
-                }}
-              />
-              <span className="max-w-[120px] truncate hidden sm:inline">
-                {shortModelName}
-              </span>
-              <span className={`text-[10px] transition-transform duration-200 inline-block ${
-                  modelPickerOpen ? "rotate-180" : ""
-                }`}>▾</span>
-            </button>
-
-            {/* Dropdown */}
-            {modelPickerOpen && (
-              <div
-                className="absolute right-0 top-full mt-1 w-72 rounded-xl border border-border
-                          bg-card shadow-lg z-50 overflow-hidden
-                          animate-[fade-in_0.15s_ease-out]"
-              >
-                <div className="px-3 py-2 border-b border-border">
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                    Select Model
-                  </p>
-                </div>
-                <div className="py-1 max-h-64 overflow-y-auto">
-                  {models.map((model) => {
-                    const isActive = model.id === selectedModel;
-                    const isDefault = model.id === defaultModel;
-                    const modelShort =
-                      model.id.split("/")[1]?.split(":")[0] || model.id;
-
-                    return (
-                      <button
-                        key={model.id}
-                        id={`model-option-${model.provider}-${modelShort}`}
-                        onClick={() => {
-                          setSelectedModel(model.id);
-                          setModelPickerOpen(false);
-                        }}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm
-                                  transition-colors duration-150
-                                  ${
-                                    isActive
-                                      ? "bg-primary/10 text-foreground"
-                                      : "text-foreground hover:bg-secondary"
-                                  }`}
-                      >
-                        <span
-                          className="w-2 h-2 rounded-full flex-shrink-0"
-                          style={{
-                            background:
-                              PROVIDER_COLORS[model.provider] ||
-                              "var(--muted-foreground)",
-                          }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium truncate">
-                              {modelShort}
-                            </span>
-                            {isDefault && (
-                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium uppercase">
-                                default
-                              </span>
-                            )}
-                          </div>
-                          <span className="text-[10px] text-muted-foreground capitalize">
-                            {model.provider}
-                          </span>
-                        </div>
-                        {isActive && (
-                          <span className="text-primary text-sm flex-shrink-0">✓</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-                <div className="px-3 py-2 border-t border-border">
-                  <p className="text-[10px] text-muted-foreground leading-relaxed">
-                    Auto-fallback is active — if the selected model fails,
-                    others are tried automatically.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <span className="text-[10px] px-2 py-0.5 rounded-full text-muted-foreground font-medium uppercase tracking-wide border border-border">
-            Research Only
-          </span>
-        </div>
+        <span className="text-[10px] px-2 py-0.5 rounded-full text-muted-foreground font-medium uppercase tracking-wide border border-border">
+          Research Only
+        </span>
       </header>
 
       {/* Messages area */}
@@ -478,6 +371,110 @@ export function Chat({
                        resize-none transition-all duration-200 text-sm
                        disabled:opacity-50 disabled:cursor-not-allowed"
             />
+          </div>
+
+          {/* Model Picker — inline in input area */}
+          <div className="relative" ref={modelPickerRef}>
+            <button
+              type="button"
+              id="model-picker-trigger"
+              onClick={() => setModelPickerOpen(!modelPickerOpen)}
+              className="flex items-center gap-1.5 px-2.5 py-2.5 rounded-xl text-xs
+                       bg-secondary border border-border hover:bg-muted
+                       transition-all duration-200
+                       text-foreground"
+              title="Select model"
+            >
+              <span
+                className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+                style={{
+                  background: currentModel
+                    ? PROVIDER_COLORS[currentModel.provider] || "var(--muted-foreground)"
+                    : "var(--muted-foreground)",
+                }}
+              />
+              <span className="max-w-[100px] truncate hidden sm:inline">
+                {shortModelName}
+              </span>
+              <span className={`text-[10px] transition-transform duration-200 inline-block ${
+                  modelPickerOpen ? "rotate-180" : ""
+                }`}>▾</span>
+            </button>
+
+            {/* Dropdown — opens upward from input area */}
+            {modelPickerOpen && (
+              <div
+                className="absolute right-0 bottom-full mb-1 w-72 rounded-xl border border-border
+                          bg-card shadow-lg z-50 overflow-hidden
+                          animate-[fade-in_0.15s_ease-out]"
+              >
+                <div className="px-3 py-2 border-b border-border">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                    Select Model
+                  </p>
+                </div>
+                <div className="py-1 max-h-64 overflow-y-auto">
+                  {models.map((model) => {
+                    const isActive = model.id === selectedModel;
+                    const isDefault = model.id === defaultModel;
+                    const modelShort =
+                      model.id.split("/")[1]?.split(":")[0] || model.id;
+
+                    return (
+                      <button
+                        type="button"
+                        key={model.id}
+                        id={`model-option-${model.provider}-${modelShort}`}
+                        onClick={() => {
+                          setSelectedModel(model.id);
+                          setModelPickerOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 text-left text-sm
+                                  transition-colors duration-150
+                                  ${
+                                    isActive
+                                      ? "bg-primary/10 text-foreground"
+                                      : "text-foreground hover:bg-secondary"
+                                  }`}
+                      >
+                        <span
+                          className="w-2 h-2 rounded-full flex-shrink-0"
+                          style={{
+                            background:
+                              PROVIDER_COLORS[model.provider] ||
+                              "var(--muted-foreground)",
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium truncate">
+                              {modelShort}
+                            </span>
+                            {isDefault && (
+                              <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium uppercase">
+                                default
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-muted-foreground capitalize">
+                            {model.provider}
+                          </span>
+                        </div>
+                        {isActive && (
+                          <span className="text-primary text-sm flex-shrink-0">✓</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="px-3 py-2 border-t border-border">
+                  <p className="text-[10px] text-muted-foreground leading-relaxed">
+                    Auto-fallback is active — if the selected model fails,
+                    others are tried automatically.
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
