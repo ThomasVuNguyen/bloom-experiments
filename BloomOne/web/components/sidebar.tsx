@@ -185,37 +185,49 @@ export function Sidebar({
                    ${isCollapsed ? "lg:w-0 lg:border-r-0 lg:overflow-hidden" : "w-72"}
                    ${isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}`}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-border min-w-[18rem]">
-          <div>
-            <span className="text-sm font-serif font-semibold text-foreground">
-              BloomOne
+        {/* Top action bar — ChatGPT-style */}
+        <div className="flex items-center justify-between px-3 pt-3 pb-1 min-w-[18rem]">
+          {/* Sidebar collapse toggle */}
+          <button
+            onClick={onToggleCollapse}
+            className="hidden lg:inline-flex items-center justify-center w-8 h-8 rounded-lg
+                       text-muted-foreground hover:text-foreground hover:bg-secondary
+                       transition-colors"
+            title="Close sidebar"
+          >
+            {/* CSS sidebar panel icon */}
+            <span className="inline-flex w-[16px] h-[14px] border border-current rounded-[2px] overflow-hidden">
+              <span className="w-[5px] h-full border-r border-current" />
             </span>
-            <p className="text-[10px] text-muted-foreground">
-              Neoantigen Vaccine Design
-            </p>
-          </div>
-          <div className="flex items-center gap-1.5">
-            {activeTab === "chats" && (
-              <button
-                onClick={onNewChat}
-                className="px-2 py-1 rounded-lg border border-primary text-primary text-xs font-medium
-                           hover:bg-primary hover:text-primary-foreground transition-colors"
-                title="New chat"
-              >
-                + New
-              </button>
-            )}
-            <button
-              onClick={onToggleCollapse}
-              className="hidden lg:inline-flex items-center justify-center w-6 h-6 rounded-md
-                         text-muted-foreground hover:text-foreground hover:bg-secondary
-                         transition-colors"
-              title="Collapse sidebar"
-            >
-              <span className="text-[11px] leading-none">—</span>
-            </button>
-          </div>
+          </button>
+
+          {/* New chat compose button */}
+          <button
+            onClick={onNewChat}
+            className="inline-flex items-center justify-center w-8 h-8 rounded-lg
+                       text-muted-foreground hover:text-foreground hover:bg-secondary
+                       transition-colors"
+            title="New chat"
+          >
+            {/* CSS compose/pencil icon */}
+            <span className="relative inline-flex w-[14px] h-[14px]">
+              <span className="absolute inset-0 border border-current rounded-[3px]" />
+              <span className="absolute -top-[1px] -right-[1px] w-[7px] h-[7px] border-b border-l border-current
+                             rotate-[-0deg] rounded-bl-[1px]"
+                    style={{ background: 'var(--card)' }} />
+              <span className="absolute top-[1px] right-[1px] w-[1px] h-[6px] bg-current rotate-[-45deg] origin-bottom" />
+            </span>
+          </button>
+        </div>
+
+        {/* Branding */}
+        <div className="px-4 pb-2 pt-1 border-b border-border min-w-[18rem]">
+          <span className="text-sm font-serif font-semibold text-foreground">
+            BloomOne
+          </span>
+          <p className="text-[10px] text-muted-foreground">
+            Neoantigen Vaccine Design
+          </p>
         </div>
 
         {/* Tabs */}

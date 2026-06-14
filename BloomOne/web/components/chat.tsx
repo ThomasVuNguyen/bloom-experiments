@@ -249,11 +249,14 @@ export function Chat({
           {isSidebarCollapsed && (
             <button
               onClick={onExpandSidebar}
-              className="hidden lg:inline-flex items-center justify-center w-7 h-7 rounded-lg
+              className="hidden lg:inline-flex items-center justify-center w-8 h-8 rounded-lg
                          hover:bg-secondary transition-colors text-muted-foreground hover:text-foreground"
               title="Open sidebar"
             >
-              <span className="text-sm leading-none">≡</span>
+              {/* CSS sidebar panel icon — matches the one in sidebar */}
+              <span className="inline-flex w-[16px] h-[14px] border border-current rounded-[2px] overflow-hidden">
+                <span className="w-[5px] h-full border-r border-current" />
+              </span>
             </button>
           )}
           <h1 className="text-base font-semibold text-foreground font-serif truncate">
